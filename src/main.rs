@@ -26,15 +26,17 @@ use clap::{Arg, App, AppSettings, ErrorKind, ArgMatches};
 use log::LogLevelFilter;
 use simplelog::TermLogger;
 use std::str::FromStr;
-use hyper::server::{Handler, Server, Request, Response};
+use hyper::server::{Handler, Server, Request as HyperRequest, Response as HyperResponse};
 use hyper::client::Client;
 use hyper::status::StatusCode;
-use pact_matching::models::{PactSpecification, Pact};
+use pact_matching::models::{PactSpecification, Pact, Interaction, Request, Response};
 use std::sync::Arc;
 use std::path::Path;
 use std::io;
 use std::fs;
 use rustc_serialize::json::Json;
+
+mod pact_support;
 
 fn main() {
     match handle_command_args() {
@@ -132,6 +134,18 @@ fn load_pacts(sources: Vec<PactSource>) -> Vec<Result<Pact, String>> {
     .collect()
 }
 
+fn match_request(expected_request: &Request, actual_request: &Request) -> bool {
+    let mut mismatches = vec![];
+    info!("comparing to expected request: {:?}", expected_request);
+    pact_matching::match_method(expected_request.method.clone(), actual_request.method.clone(),
+        &mut mismatches);
+    pact_matching::match_path(expected_request.path.clone(), actual_request.path.clone(),
+        &mut mismatches, &expected_request.matching_rules);
+    pact_matching::match_query(expected_request.query.clone(), actual_request.query.clone(),
+        &mut mismatches, &expected_request.matching_rules);
+    mismatches.is_empty()
+}
+
 struct ServerHandler {
     sources: Arc<Vec<Pact>>
 }
@@ -142,12 +156,32 @@ impl ServerHandler {
             sources: Arc::new(sources)
         }
     }
+
+    fn find_matching_request(&self, request: &Request) -> Result<Response, String> {
+        let match_results = self.sources
+            .iter()
+            .flat_map(|pact| pact.interactions.clone())
+            .filter(|i| match_request(&i.request, request))
+            .collect::<Vec<Interaction>>();
+        if match_results.len() > 1 {
+            warn!("Found more than one pact request, using the first one");
+        }
+        match match_results.first() {
+            Some(interaction) => Ok(interaction.response.clone()),
+            None => Err(s!("No matching request found"))
+        }
+    }
 }
 
 impl Handler for ServerHandler {
 
-    fn handle(&self, req: Request, mut res: Response) {
-        *res.status_mut() = StatusCode::NotFound;
+    fn handle(&self, mut req: HyperRequest, mut res: HyperResponse) {
+        let request = pact_support::hyper_request_to_pact_request(&mut req);
+        info!("Received request: {:?}", request);
+        match self.find_matching_request(&request) {
+            Ok(ref response) => pact_support::pact_response_to_hyper_response(res, response),
+            Err(_) => *res.status_mut() = StatusCode::NotFound
+        }
     }
 }
 
