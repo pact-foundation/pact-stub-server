@@ -136,7 +136,6 @@ fn load_pacts(sources: Vec<PactSource>) -> Vec<Result<Pact, String>> {
 
 fn match_request(expected_request: &Request, actual_request: &Request) -> bool {
     let mut mismatches = vec![];
-    info!("comparing to expected request: {:?}", expected_request);
     pact_matching::match_method(expected_request.method.clone(), actual_request.method.clone(),
         &mut mismatches);
     pact_matching::match_path(expected_request.path.clone(), actual_request.path.clone(),
@@ -164,7 +163,8 @@ impl ServerHandler {
             .filter(|i| match_request(&i.request, request))
             .collect::<Vec<Interaction>>();
         if match_results.len() > 1 {
-            warn!("Found more than one pact request, using the first one");
+            warn!("Found more than one pact request for path '{}', using the first one",
+                request.path);
         }
         match match_results.first() {
             Some(interaction) => Ok(interaction.response.clone()),
@@ -180,7 +180,10 @@ impl Handler for ServerHandler {
         info!("Received request: {:?}", request);
         match self.find_matching_request(&request) {
             Ok(ref response) => pact_support::pact_response_to_hyper_response(res, response),
-            Err(_) => *res.status_mut() = StatusCode::NotFound
+            Err(msg) => {
+                warn!("{}", msg);
+                *res.status_mut() = StatusCode::NotFound;
+            }
         }
     }
 }

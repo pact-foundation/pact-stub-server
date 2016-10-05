@@ -1,5 +1,6 @@
 use hyper::server::{Request as HyperRequest, Response as HyperResponse};
-use hyper::header::{Headers, AccessControlAllowOrigin};
+use hyper::header::{Headers, ContentType, AccessControlAllowOrigin};
+use hyper::mime::{Mime, TopLevel, SubLevel, Attr, Value};
 use pact_matching::models::{Request, Response, OptionalBody};
 use pact_matching::models::parse_query_string;
 use hyper::uri::RequestUri;
@@ -70,8 +71,13 @@ pub fn hyper_request_to_pact_request(req: &mut HyperRequest) -> Request {
 }
 
 pub fn pact_response_to_hyper_response(mut res: HyperResponse, response: &Response) {
+    info!("Sending response {:?}", response);
     *res.status_mut() = StatusCode::from_u16(response.status);
     res.headers_mut().set(AccessControlAllowOrigin::Any);
+    res.headers_mut().set(
+        ContentType(Mime(TopLevel::Application, SubLevel::Json,
+                         vec![(Attr::Charset, Value::Utf8)]))
+    );
     match response.headers {
         Some(ref headers) => {
             for (k, v) in headers.clone() {
@@ -80,6 +86,7 @@ pub fn pact_response_to_hyper_response(mut res: HyperResponse, response: &Respon
         },
         None => ()
     }
+
     match response.body {
         OptionalBody::Present(ref body) => {
             res.send(body.as_bytes()).unwrap();
