@@ -46,7 +46,7 @@ def projectProps = new File('Cargo.toml').text
 def versionMatch = projectProps =~ /(?m)version\s*=\s*"(.*)"/
 def version = versionMatch[0][1]
 
-def prevTag = 'git describe --abbrev=0  --tags --match=pact_verifier_cli-*'.execute().text.trim()
+def prevTag = 'git describe --abbrev=0  --tags --match=v*'.execute().text.trim()
 def changelog = []
 executeOnShell("git log --pretty='* %h - %s (%an, %ad)' ${prevTag}..HEAD .".toString()) {
   println it
@@ -89,7 +89,7 @@ ask('Update Changelog?: [Y]') {
 
 ask('Tag and Push commits?: [Y]') {
   executeOnShell 'git push'
-  executeOnShell("git tag pact_verifier_cli-v${releaseVer}")
+  executeOnShell("git tag v${releaseVer}")
   executeOnShell 'git push --tags'
 }
 
