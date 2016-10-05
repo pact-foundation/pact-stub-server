@@ -8,6 +8,8 @@
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate pact_matching;
 extern crate simplelog;
+extern crate hyper;
+extern crate rustc_serialize;
 
 #[cfg(test)]
 #[macro_use(expect)]
@@ -21,10 +23,18 @@ extern crate quickcheck;
 
 use std::env;
 use clap::{Arg, App, AppSettings, ErrorKind, ArgMatches};
-use pact_matching::models::PactSpecification;
 use log::LogLevelFilter;
 use simplelog::TermLogger;
 use std::str::FromStr;
+use hyper::server::{Handler, Server, Request, Response};
+use hyper::client::Client;
+use hyper::status::StatusCode;
+use pact_matching::models::{PactSpecification, Pact};
+use std::sync::Arc;
+use std::path::Path;
+use std::io;
+use std::fs;
+use rustc_serialize::json::Json;
 
 fn main() {
     match handle_command_args() {
@@ -50,9 +60,7 @@ pub enum PactSource {
     /// Load all the pacts from a Directory
     Dir(String),
     /// Load the pact from a URL
-    URL(String),
-    /// Load all pacts with the provider name from the pact broker url
-    BrokerUrl(String, String)
+    URL(String)
 }
 
 fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
@@ -69,12 +77,100 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
         Some(values) => sources.extend(values.map(|v| PactSource::URL(s!(v))).collect::<Vec<PactSource>>()),
         None => ()
     };
-    match matches.values_of("broker-url") {
-        Some(values) => sources.extend(values.map(|v| PactSource::BrokerUrl(s!(matches.value_of("provider-name").unwrap()),
-            s!(v))).collect::<Vec<PactSource>>()),
-        None => ()
-    };
     sources
+}
+
+fn walkdir(dir: &Path) -> io::Result<Vec<io::Result<Pact>>> {
+    let mut pacts = vec![];
+    debug!("Scanning {:?}", dir);
+    for entry in try!(fs::read_dir(dir)) {
+        let entry = try!(entry);
+        let path = entry.path();
+        if path.is_dir() {
+            try!(walkdir(&path));
+        } else {
+            pacts.push(Pact::read_pact(&path))
+        }
+    }
+    Ok(pacts)
+}
+
+fn pact_from_url(url: &String) -> Result<Pact, String> {
+    let client = Client::new();
+    match client.get(url).send() {
+        Ok(mut res) => if res.status.is_success() {
+                let pact_json = Json::from_reader(&mut res);
+                match pact_json {
+                    Ok(ref json) => Ok(Pact::from_json(json)),
+                    Err(err) => Err(format!("Failed to parse Pact JSON - {}", err))
+                }
+            } else {
+                Err(format!("Request failed with status - {}", res.status))
+            },
+        Err(err) => Err(format!("Request failed - {}", err))
+    }
+}
+
+fn load_pacts(sources: Vec<PactSource>) -> Vec<Result<Pact, String>> {
+    sources.iter().flat_map(|s| {
+        match s {
+            &PactSource::File(ref file) => vec![Pact::read_pact(Path::new(&file))
+                .map_err(|err| format!("Failed to load pact '{}' - {}", file, err))],
+            &PactSource::Dir(ref dir) => match walkdir(Path::new(dir)) {
+                Ok(ref pacts) => pacts.iter().map(|p| {
+                        match p {
+                            &Ok(ref pact) => Ok(pact.clone()),
+                            &Err(ref err) => Err(format!("Failed to load pact from '{}' - {}", dir, err))
+                        }
+                    }).collect(),
+                Err(err) => vec![Err(format!("Could not load pacts from directory '{}' - {}", dir, err))]
+            },
+            &PactSource::URL(ref url) => vec![pact_from_url(url)
+                .map_err(|err| format!("Failed to load pact '{}' - {}", url, err))]
+        }
+    })
+    .collect()
+}
+
+struct ServerHandler {
+    sources: Arc<Vec<Pact>>
+}
+
+impl ServerHandler {
+    fn new(sources: Vec<Pact>) -> ServerHandler {
+        ServerHandler {
+            sources: Arc::new(sources)
+        }
+    }
+}
+
+impl Handler for ServerHandler {
+
+    fn handle(&self, req: Request, mut res: Response) {
+        *res.status_mut() = StatusCode::NotFound;
+    }
+}
+
+fn start_server(port: u16, sources: Vec<Pact>) -> Result<(), i32> {
+    match Server::http(format!("0.0.0.0:{}", port).as_str()) {
+        Ok(mut server) => {
+            server.keep_alive(None);
+            match server.handle(ServerHandler::new(sources)) {
+                Ok(listener) => {
+                    info!("Server started on port {}", listener.socket.port());
+                    Ok(())
+                },
+                Err(err) => {
+                    error!("could not bind listener to port: {}", err);
+                    Err(2)
+                }
+            }
+        },
+        Err(err) => {
+            error!("could not start server: {}", err);
+            Err(1)
+        }
+    }
 }
 
 fn handle_command_args() -> Result<(), i32> {
@@ -84,7 +180,7 @@ fn handle_command_args() -> Result<(), i32> {
     let version = format!("v{}", crate_version!());
     let app = App::new(program)
         .version(version.as_str())
-        .about("Standalone Pact verifier")
+        .about("Pact Stub Server")
         .version_short("v")
         .setting(AppSettings::ArgRequiredElseHelp)
         .setting(AppSettings::ColoredHelp)
@@ -98,7 +194,7 @@ fn handle_command_args() -> Result<(), i32> {
         .arg(Arg::with_name("file")
             .short("f")
             .long("file")
-            .required_unless_one(&["dir", "url", "broker-url"])
+            .required_unless_one(&["dir", "url"])
             .takes_value(true)
             .use_delimiter(false)
             .multiple(true)
@@ -108,7 +204,7 @@ fn handle_command_args() -> Result<(), i32> {
         .arg(Arg::with_name("dir")
             .short("d")
             .long("dir")
-            .required_unless_one(&["file", "url", "broker-url"])
+            .required_unless_one(&["file", "url"])
             .takes_value(true)
             .use_delimiter(false)
             .multiple(true)
@@ -118,67 +214,43 @@ fn handle_command_args() -> Result<(), i32> {
         .arg(Arg::with_name("url")
             .short("u")
             .long("url")
-            .required_unless_one(&["file", "dir", "broker-url"])
+            .required_unless_one(&["file", "dir"])
             .takes_value(true)
             .use_delimiter(false)
             .multiple(true)
             .number_of_values(1)
             .empty_values(false)
             .help("URL of pact file to verify (can be repeated)"))
-        .arg(Arg::with_name("broker-url")
-            .short("b")
-            .long("broker-url")
-            .required_unless_one(&["file", "dir", "url"])
-            .requires("provider-name")
-            .takes_value(true)
-            .use_delimiter(false)
-            .multiple(true)
-            .number_of_values(1)
-            .empty_values(false)
-            .help("URL of the pact broker to fetch pacts from to verify (requires the provider name parameter)"))
-        .arg(Arg::with_name("hostname")
-            .short("h")
-            .long("hostname")
-            .takes_value(true)
-            .use_delimiter(false)
-            .help("Provider hostname (defaults to localhost)"))
         .arg(Arg::with_name("port")
             .short("p")
             .long("port")
             .takes_value(true)
             .use_delimiter(false)
-            .help("Provider port (defaults to 8080)")
+            .help("Port to run on (defaults to random port assigned by the OS)")
             .validator(integer_value))
-        .arg(Arg::with_name("provider-name")
-            .short("n")
-            .long("provider-name")
-            .takes_value(true)
-            .use_delimiter(false)
-            .help("Provider name (defaults to provider)"))
-        .arg(Arg::with_name("state-change-url")
-            .short("s")
-            .long("state-change-url")
-            .takes_value(true)
-            .use_delimiter(false)
-            .help("URL to post state change requests to"))
-        .arg(Arg::with_name("state-change-as-query")
-            .long("state-change-as-query")
-            .help("State change request data will be sent as query parameters instead of in the request body"))
-        .arg(Arg::with_name("state-change-teardown")
-            .long("state-change-teardown")
-            .help("State change teardown requests are to be made after each interaction"))
         ;
 
     let matches = app.get_matches_safe();
     match matches {
         Ok(ref matches) => {
-            let level = matches.value_of("loglevel").unwrap_or("warn");
+            let level = matches.value_of("loglevel").unwrap_or("info");
             let log_level = match level {
                 "none" => LogLevelFilter::Off,
                 _ => LogLevelFilter::from_str(level).unwrap()
             };
             TermLogger::init(log_level).unwrap();
-            Ok(())
+            let sources = pact_source(matches);
+            let pacts = load_pacts(sources);
+            if pacts.iter().any(|p| p.is_err()) {
+                error!("There were errors loading the pact files.");
+                for error in pacts.iter().filter(|p| p.is_err()).cloned().map(|e| e.unwrap_err()) {
+                    error!("  - {}", error);
+                }
+                Err(3)
+            } else {
+                let port = matches.value_of("port").unwrap_or("0").parse::<u16>().unwrap();
+                start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect())
+            }
         },
         Err(ref err) => {
             match err.kind {
