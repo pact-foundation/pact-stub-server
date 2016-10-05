@@ -1,0 +1,32 @@
+[package]
+name = "pact-stub-server"
+version = "0.0.0"
+authors = ["Ronald Holshausen <uglyog@gmail.com>"]
+description = "Standalone pact stub server"
+homepage = "http://www.pact.io"
+repository = "https://github.com/pact-foundation/pact-reference/blob/master/rust/pact_verifier_cli"
+readme = "README.md"
+keywords = ["testing", "pact", "cdc"]
+license = "MIT"
+exclude = [
+    "*.iml"
+]
+
+[dependencies]
+clap = "2.13.0"
+rustc-serialize = "0.3"
+pact_matching = "0.2.0"
+p-macro = "^0.2.0"
+simplelog = "^0.1.0"
+log = "0.3.5"
+maplit = "0.1.3"
+itertools = "0.5.1"
+
+[dependencies.hyper]
+version = "0.9.10"
+default-features = false
+
+[dev-dependencies]
+quickcheck = "0.2"
+expectest = "0.5.1"
+rand = "0.3"
