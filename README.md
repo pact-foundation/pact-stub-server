@@ -1,5 +1,7 @@
 # Standalone Pact Stub Server
 
+[![Build Status](https://travis-ci.org/uglyog/pact-stub-server.svg?branch=master)](https://travis-ci.org/uglyog/pact-stub-server)
+
 This project provides a server that can generate responses based on pact files. It is a single executable binary. It implements the [V2 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-2).
 
 [Online rust docs](https://docs.rs/pact-stub-server/)
