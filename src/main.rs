@@ -24,7 +24,7 @@
 //! OPTIONS:
 //!     -d, --dir <dir>              Directory of pact files to verify (can be repeated)
 //!     -f, --file <file>            Pact file to verify (can be repeated)
-//!     -l, --loglevel <loglevel>    Log level (defaults to warn) [values: error, warn, info, debug, trace, none]
+//!     -l, --loglevel <loglevel>    Log level (defaults to info) [values: error, warn, info, debug, trace, none]
 //!     -p, --port <port>            Port to run on (defaults to random port assigned by the OS)
 //!     -u, --url <url>              URL of pact file to verify (can be repeated)
 //!
@@ -34,7 +34,7 @@
 //!
 //! ### Log Level
 //!
-//! You can control the log level with the `-l, --loglevel <loglevel>` option. It defaults to warn, and the options that you can specify are: error, warn, info, debug, trace, none.
+//! You can control the log level with the `-l, --loglevel <loglevel>` option. It defaults to info, and the options that you can specify are: error, warn, info, debug, trace, none.
 //!
 //! ### Pact File Sources
 //!
@@ -282,7 +282,7 @@ fn handle_command_args() -> Result<(), i32> {
             .takes_value(true)
             .use_delimiter(false)
             .possible_values(&["error", "warn", "info", "debug", "trace", "none"])
-            .help("Log level (defaults to warn)"))
+            .help("Log level (defaults to info)"))
         .arg(Arg::with_name("file")
             .short("f")
             .long("file")
