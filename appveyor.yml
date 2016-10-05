@@ -1,0 +1,25 @@
+# fix lineendings in Windows
+init:
+  - git config --global core.autocrlf input
+
+environment:
+  RUST_BACKTRACE: 1
+  matrix:
+  - TARGET: x86_64-pc-windows-msvc
+  - TARGET: i686-pc-windows-msvc
+  - TARGET: i686-pc-windows-gnu
+
+install:
+  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-1.12.0-${env:TARGET}.exe"
+  - rust-1.12.0-%TARGET%.exe /VERYSILENT /NORESTART /DIR="C:\Program Files (x86)\Rust"
+  - SET PATH=%PATH%;C:\Program Files (x86)\Rust\bin
+  - SET PATH=%PATH%;C:\MinGW\bin
+
+build: false
+
+build_script:
+  - rustc -V
+  - cargo -V
+  - cargo build
+  - cargo test
+
