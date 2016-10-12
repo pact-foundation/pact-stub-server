@@ -53,7 +53,7 @@
 //! | Option | Description |
 //! |--------|-------------|
 //! | `-p, --port <port>` | The port to bind to. If not specified, a random port will be allocated by the operating system. |
-//! 
+//!
 
 #![warn(missing_docs)]
 
@@ -158,7 +158,7 @@ fn pact_from_url(url: &String) -> Result<Pact, String> {
         Ok(mut res) => if res.status.is_success() {
                 let pact_json = Json::from_reader(&mut res);
                 match pact_json {
-                    Ok(ref json) => Ok(Pact::from_json(json)),
+                    Ok(ref json) => Ok(Pact::from_json(url, json)),
                     Err(err) => Err(format!("Failed to parse Pact JSON - {}", err))
                 }
             } else {
