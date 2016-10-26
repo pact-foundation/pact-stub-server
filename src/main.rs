@@ -65,14 +65,13 @@
 extern crate simplelog;
 extern crate hyper;
 extern crate rustc_serialize;
+extern crate itertools;
 
 #[cfg(test)]
 #[macro_use(expect)]
 extern crate expectest;
-
 #[cfg(test)]
 extern crate rand;
-
 #[cfg(test)]
 extern crate quickcheck;
 
@@ -85,11 +84,13 @@ use hyper::server::{Handler, Server, Request as HyperRequest, Response as HyperR
 use hyper::client::Client;
 use hyper::status::StatusCode;
 use pact_matching::models::{PactSpecification, Pact, Interaction, Request, Response};
+use pact_matching::*;
 use std::sync::Arc;
 use std::path::Path;
 use std::io;
 use std::fs;
 use rustc_serialize::json::Json;
+use itertools::Itertools;
 
 mod pact_support;
 
@@ -189,17 +190,6 @@ fn load_pacts(sources: Vec<PactSource>) -> Vec<Result<Pact, String>> {
     .collect()
 }
 
-fn match_request(expected_request: &Request, actual_request: &Request) -> bool {
-    let mut mismatches = vec![];
-    pact_matching::match_method(expected_request.method.clone(), actual_request.method.clone(),
-        &mut mismatches);
-    pact_matching::match_path(expected_request.path.clone(), actual_request.path.clone(),
-        &mut mismatches, &expected_request.matching_rules);
-    pact_matching::match_query(expected_request.query.clone(), actual_request.query.clone(),
-        &mut mismatches, &expected_request.matching_rules);
-    mismatches.is_empty()
-}
-
 struct ServerHandler {
     sources: Arc<Vec<Pact>>
 }
@@ -213,13 +203,25 @@ impl ServerHandler {
 
     fn find_matching_request(&self, request: &Request) -> Result<Response, String> {
         let match_results = self.sources
-            .iter()
-            .flat_map(|pact| pact.interactions.clone())
-            .filter(|i| match_request(&i.request, request))
-            .collect::<Vec<Interaction>>();
+          .iter()
+          .flat_map(|pact| pact.interactions.clone())
+          .map(|i| (i.clone(), pact_matching::match_request(i.request, request.clone())))
+          .filter(|&(_, ref mismatches)| mismatches.iter().all(|mismatch|{
+            match mismatch {
+              &Mismatch::MethodMismatch { .. } => false,
+              &Mismatch::PathMismatch { .. } => false,
+              &Mismatch::QueryMismatch { .. } => false,
+              _ => true
+            }
+          }))
+          .sorted_by(|a, b| Ord::cmp(&a.1.len(), &b.1.len()))
+          .iter()
+          .map(|&(ref i, _)| i)
+          .cloned()
+          .collect::<Vec<Interaction>>();
         if match_results.len() > 1 {
-            warn!("Found more than one pact request for path '{}', using the first one",
-                request.path);
+            warn!("Found more than one pact request for method {} and path '{}', using the first one",
+                request.method, request.path);
         }
         match match_results.first() {
             Some(interaction) => Ok(interaction.response.clone()),
@@ -367,28 +369,118 @@ fn handle_command_args() -> Result<(), i32> {
 #[cfg(test)]
 mod test {
 
-    use quickcheck::{TestResult, quickcheck};
-    use rand::Rng;
-    use super::integer_value;
-    use expectest::prelude::*;
+  use quickcheck::{TestResult, quickcheck};
+  use rand::Rng;
+  use super::{integer_value, ServerHandler};
+  use expectest::prelude::*;
+  use pact_matching::models::{Pact, Interaction, Request, Response, OptionalBody};
 
-    #[test]
-    fn validates_integer_value() {
-        fn prop(s: String) -> TestResult {
-            let mut rng = ::rand::thread_rng();
-            if rng.gen() && s.chars().any(|ch| !ch.is_numeric()) {
-                TestResult::discard()
-            } else {
-                let validation = integer_value(s.clone());
-                match validation {
-                    Ok(_) => TestResult::from_bool(!s.is_empty() && s.chars().all(|ch| ch.is_numeric() )),
-                    Err(_) => TestResult::from_bool(s.is_empty() || s.chars().find(|ch| !ch.is_numeric() ).is_some())
-                }
-            }
-        }
-        quickcheck(prop as fn(_) -> _);
+  #[test]
+  fn validates_integer_value() {
+      fn prop(s: String) -> TestResult {
+          let mut rng = ::rand::thread_rng();
+          if rng.gen() && s.chars().any(|ch| !ch.is_numeric()) {
+              TestResult::discard()
+          } else {
+              let validation = integer_value(s.clone());
+              match validation {
+                  Ok(_) => TestResult::from_bool(!s.is_empty() && s.chars().all(|ch| ch.is_numeric() )),
+                  Err(_) => TestResult::from_bool(s.is_empty() || s.chars().find(|ch| !ch.is_numeric() ).is_some())
+              }
+          }
+      }
+      quickcheck(prop as fn(_) -> _);
 
-        expect!(integer_value(s!("1234"))).to(be_ok());
-        expect!(integer_value(s!("1234x"))).to(be_err());
-    }
+      expect!(integer_value(s!("1234"))).to(be_ok());
+      expect!(integer_value(s!("1234x"))).to(be_err());
+  }
+
+  #[test]
+  fn match_request_finds_the_most_appropriate_response() {
+    let interaction1 = Interaction::default();
+
+    let interaction2 = Interaction::default();
+
+    let pact1 = Pact { interactions: vec![ interaction1.clone() ], .. Pact::default() };
+    let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+    let handler = ServerHandler::new(vec![pact1, pact2]);
+
+    let request1 = Request::default_request();
+
+    expect!(handler.find_matching_request(&request1)).to(be_ok().value(interaction1.response));
+  }
+
+  #[test]
+  fn match_request_excludes_requests_with_different_methods() {
+    let interaction1 = Interaction { request: Request { method: s!("PUT"), .. Request::default_request() }, .. Interaction::default() };
+
+    let interaction2 = Interaction { .. Interaction::default() };
+
+    let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
+    let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+    let handler = ServerHandler::new(vec![pact1, pact2]);
+
+    let request1 = Request { method: s!("POST"), .. Request::default_request() };
+
+    expect!(handler.find_matching_request(&request1)).to(be_err());
+  }
+
+  #[test]
+  fn match_request_excludes_requests_with_different_paths() {
+    let interaction1 = Interaction { request: Request { path: s!("/one"), .. Request::default_request() }, .. Interaction::default() };
+
+    let interaction2 = Interaction { .. Interaction::default() };
+
+    let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
+    let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+    let handler = ServerHandler::new(vec![pact1, pact2]);
+
+    let request1 = Request { path: s!("/two"), .. Request::default_request() };
+
+    expect!(handler.find_matching_request(&request1)).to(be_err());
+  }
+
+  #[test]
+  fn match_request_excludes_requests_with_different_query_params() {
+    let interaction1 = Interaction { request: Request {
+      query: Some(hashmap!{ s!("A") => vec![ s!("B") ] }),
+      .. Request::default_request() }, .. Interaction::default() };
+
+    let interaction2 = Interaction { .. Interaction::default() };
+
+    let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
+    let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+    let handler = ServerHandler::new(vec![pact1, pact2]);
+
+    let request1 = Request {
+      query: Some(hashmap!{ s!("A") => vec![ s!("C") ] }),
+      .. Request::default_request() };
+
+    expect!(handler.find_matching_request(&request1)).to(be_err());
+  }
+
+  #[test]
+  fn match_request_returns_the_closest_match() {
+    let interaction1 = Interaction { request: Request {
+      body: OptionalBody::Present(s!("{\"a\": 1, \"b\": 2, \"c\": 3}")),
+      .. Request::default_request() },
+      response: Response { status: 200, .. Response::default_response() },
+      .. Interaction::default() };
+
+    let interaction2 = Interaction { request: Request {
+      body: OptionalBody::Present(s!("{\"a\": 2, \"b\": 4, \"c\": 6}")),
+      .. Request::default_request() },
+      response: Response { status: 201, .. Response::default_response() },
+      .. Interaction::default() };
+
+    let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
+    let pact2 = Pact { interactions: vec![ interaction2.clone() ], .. Pact::default() };
+    let handler = ServerHandler::new(vec![pact1, pact2]);
+
+    let request1 = Request {
+      body: OptionalBody::Present(s!("{\"a\": 1, \"b\": 4, \"c\": 6}")),
+      .. Request::default_request() };
+
+    expect!(handler.find_matching_request(&request1)).to(be_ok().value(interaction2.response));
+  }
 }
