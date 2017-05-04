@@ -11,7 +11,7 @@
 //! The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this with out any options displays the standard help.
 //!
 //! ```console,ignore
-//! pact-stub-server v0.0.0
+//! pact-stub-server v0.0.2
 //! Pact Stub Server
 //!
 //! USAGE:
@@ -78,7 +78,7 @@ extern crate quickcheck;
 use std::env;
 use clap::{Arg, App, AppSettings, ErrorKind, ArgMatches};
 use log::LogLevelFilter;
-use simplelog::TermLogger;
+use simplelog::{TermLogger, SimpleLogger, Config};
 use std::str::FromStr;
 use hyper::server::{Handler, Server, Request as HyperRequest, Response as HyperResponse};
 use hyper::client::Client;
@@ -328,11 +328,7 @@ fn handle_command_args() -> Result<(), i32> {
     match matches {
         Ok(ref matches) => {
             let level = matches.value_of("loglevel").unwrap_or("info");
-            let log_level = match level {
-                "none" => LogLevelFilter::Off,
-                _ => LogLevelFilter::from_str(level).unwrap()
-            };
-            TermLogger::init(log_level).unwrap();
+            setup_logger(level);
             let sources = pact_source(matches);
             let pacts = load_pacts(sources);
             if pacts.iter().any(|p| p.is_err()) {
@@ -364,6 +360,17 @@ fn handle_command_args() -> Result<(), i32> {
             }
         }
     }
+}
+
+fn setup_logger(level: &str) {
+  let log_level = match level {
+    "none" => LogLevelFilter::Off,
+    _ => LogLevelFilter::from_str(level).unwrap()
+  };
+  match TermLogger::init(log_level, Config::default()) {
+    Err(_) => SimpleLogger::init(log_level, Config::default()).unwrap_or(()),
+    Ok(_) => ()
+  }
 }
 
 #[cfg(test)]
