@@ -1,5 +1,10 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.2 - Bugfix Release
+
+* 280de38 - Upgraded simple_log crate to 0.4.2 and switch to a simple logger if the term logger fails dueto there not being a terminal #2 (Ronald Holshausen, Thu May 4 11:36:30 2017 +1000)
+* b7819ac - bump version to 0.0.2 (Ronald Holshausen, Wed Oct 26 15:01:50 2016 +1100)
+
 # 0.0.1 - return the closest matching interaction, based on the body and headers
 
 * fff769d - return the closest matching interaction, based on the body and headers (Ronald Holshausen, Wed Oct 26 14:55:02 2016 +1100)
