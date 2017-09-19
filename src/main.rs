@@ -190,13 +190,15 @@ fn load_pacts(sources: Vec<PactSource>) -> Vec<Result<Pact, String>> {
 }
 
 struct ServerHandler {
-    sources: Arc<Vec<Pact>>
+  sources: Arc<Vec<Pact>>,
+  auto_cors: bool
 }
 
 impl ServerHandler {
-    fn new(sources: Vec<Pact>) -> ServerHandler {
+    fn new(sources: Vec<Pact>, auto_cors: bool) -> ServerHandler {
         ServerHandler {
-            sources: Arc::new(sources)
+          sources: Arc::new(sources),
+          auto_cors
         }
     }
 
@@ -224,7 +226,13 @@ impl ServerHandler {
         }
         match match_results.first() {
             Some(interaction) => Ok(interaction.response.clone()),
-            None => Err(s!("No matching request found"))
+            None => {
+              if self.auto_cors && request.method.to_uppercase() == "OPTION" {
+                Ok(Response::default_response())
+              } else {
+                Err(s!("No matching request found"))
+              }
+            }
         }
     }
 }
@@ -244,11 +252,11 @@ impl Handler for ServerHandler {
     }
 }
 
-fn start_server(port: u16, sources: Vec<Pact>) -> Result<(), i32> {
+fn start_server(port: u16, sources: Vec<Pact>, auto_cors: bool) -> Result<(), i32> {
     match Server::http(format!("0.0.0.0:{}", port).as_str()) {
         Ok(mut server) => {
             server.keep_alive(None);
-            match server.handle(ServerHandler::new(sources)) {
+            match server.handle(ServerHandler::new(sources, auto_cors)) {
                 Ok(listener) => {
                     info!("Server started on port {}", listener.socket.port());
                     Ok(())
@@ -321,7 +329,12 @@ fn handle_command_args() -> Result<(), i32> {
             .use_delimiter(false)
             .help("Port to run on (defaults to random port assigned by the OS)")
             .validator(integer_value))
-        ;
+        .arg(Arg::with_name("cors")
+          .short("o")
+          .long("cors")
+          .takes_value(false)
+          .use_delimiter(false)
+          .help("Automatically respond to OPTION requests and return default CORS headers"));
 
     let matches = app.get_matches_safe();
     match matches {
@@ -338,7 +351,8 @@ fn handle_command_args() -> Result<(), i32> {
                 Err(3)
             } else {
                 let port = matches.value_of("port").unwrap_or("0").parse::<u16>().unwrap();
-                start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect())
+                start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect(),
+                             matches.is_present("cors"))
             }
         },
         Err(ref err) => {
@@ -409,7 +423,7 @@ mod test {
 
     let pact1 = Pact { interactions: vec![ interaction1.clone() ], .. Pact::default() };
     let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
-    let handler = ServerHandler::new(vec![pact1, pact2]);
+    let handler = ServerHandler::new(vec![pact1, pact2], false);
 
     let request1 = Request::default_request();
 
@@ -418,13 +432,14 @@ mod test {
 
   #[test]
   fn match_request_excludes_requests_with_different_methods() {
-    let interaction1 = Interaction { request: Request { method: s!("PUT"), .. Request::default_request() }, .. Interaction::default() };
+    let interaction1 = Interaction { request: Request { method: s!("PUT"),
+      .. Request::default_request() }, .. Interaction::default() };
 
     let interaction2 = Interaction { .. Interaction::default() };
 
     let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
     let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
-    let handler = ServerHandler::new(vec![pact1, pact2]);
+    let handler = ServerHandler::new(vec![pact1, pact2], false);
 
     let request1 = Request { method: s!("POST"), .. Request::default_request() };
 
@@ -439,7 +454,7 @@ mod test {
 
     let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
     let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
-    let handler = ServerHandler::new(vec![pact1, pact2]);
+    let handler = ServerHandler::new(vec![pact1, pact2], false);
 
     let request1 = Request { path: s!("/two"), .. Request::default_request() };
 
@@ -456,7 +471,7 @@ mod test {
 
     let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
     let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
-    let handler = ServerHandler::new(vec![pact1, pact2]);
+    let handler = ServerHandler::new(vec![pact1, pact2], false);
 
     let request1 = Request {
       query: Some(hashmap!{ s!("A") => vec![ s!("C") ] }),
@@ -481,12 +496,27 @@ mod test {
 
     let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
     let pact2 = Pact { interactions: vec![ interaction2.clone() ], .. Pact::default() };
-    let handler = ServerHandler::new(vec![pact1, pact2]);
+    let handler = ServerHandler::new(vec![pact1, pact2], false);
 
     let request1 = Request {
       body: OptionalBody::Present(s!("{\"a\": 1, \"b\": 4, \"c\": 6}")),
       .. Request::default_request() };
 
     expect!(handler.find_matching_request(&request1)).to(be_ok().value(interaction2.response));
+  }
+
+  #[test]
+  fn with_auto_cors_return_200_with_an_option_request() {
+    let interaction1 = Interaction::default();
+    let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
+    let handler = ServerHandler::new(vec![pact1.clone()], true);
+    let handler2 = ServerHandler::new(vec![pact1.clone()], false);
+
+    let request1 = Request {
+      method: s!("OPTION"),
+      .. Request::default_request() };
+
+    expect!(handler.find_matching_request(&request1)).to(be_ok());
+    expect!(handler2.find_matching_request(&request1)).to(be_err());
   }
 }
