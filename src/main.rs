@@ -64,7 +64,7 @@
 #[macro_use] extern crate pact_matching;
 extern crate simplelog;
 extern crate hyper;
-extern crate rustc_serialize;
+extern crate serde_json;
 extern crate itertools;
 
 #[cfg(test)]
@@ -89,7 +89,6 @@ use std::sync::Arc;
 use std::path::Path;
 use std::io;
 use std::fs;
-use rustc_serialize::json::Json;
 use itertools::Itertools;
 
 mod pact_support;
@@ -157,7 +156,7 @@ fn pact_from_url(url: &String) -> Result<Pact, String> {
     let client = Client::new();
     match client.get(url).send() {
         Ok(mut res) => if res.status.is_success() {
-                let pact_json = Json::from_reader(&mut res);
+                let pact_json = serde_json::from_reader(&mut res);
                 match pact_json {
                     Ok(ref json) => Ok(Pact::from_json(url, json)),
                     Err(err) => Err(format!("Failed to parse Pact JSON - {}", err))
@@ -350,7 +349,7 @@ fn handle_command_args() -> Result<(), i32> {
                 },
                 ErrorKind::VersionDisplayed => {
                     print_version();
-                    println!("");
+                    println!();
                     Ok(())
                 },
                 _ => {
