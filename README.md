@@ -14,23 +14,23 @@ The stub server works by taking all the interactions (requests and responses) fr
 The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this with out any options displays the standard help.
 
 ```console
-pact-stub-server v0.0.0
+pact-stub-server v0.0.3
 Pact Stub Server
 
 USAGE:
-    pact-stub-server [OPTIONS] --file <file> --dir <dir> --url <url>
+    pact-stub-server [FLAGS] [OPTIONS] --dir <dir>... --file <file>... --url <url>...
 
 FLAGS:
+    -o, --cors       Automatically respond to OPTION requests and return default CORS headers
     -h, --help       Prints help information
     -v, --version    Prints version information
 
 OPTIONS:
-    -d, --dir <dir>              Directory of pact files to verify (can be repeated)
-    -f, --file <file>            Pact file to verify (can be repeated)
+    -d, --dir <dir>...           Directory of pact files to verify (can be repeated)
+    -f, --file <file>...         Pact file to verify (can be repeated)
     -l, --loglevel <loglevel>    Log level (defaults to info) [values: error, warn, info, debug, trace, none]
     -p, --port <port>            Port to run on (defaults to random port assigned by the OS)
-    -u, --url <url>              URL of pact file to verify (can be repeated)
-
+    -u, --url <url>...           URL of pact file to verify (can be repeated)
 ```
 
 ## Options
@@ -38,6 +38,10 @@ OPTIONS:
 ### Log Level
 
 You can control the log level with the `-l, --loglevel <loglevel>` option. It defaults to info, and the options that you can specify are: error, warn, info, debug, trace, none.
+
+### CORS pre-flight requests
+
+If you specify the `-o, --cors` option, then any un-matched OPTION request will result in a default 200 response.
 
 ### Pact File Sources
 
