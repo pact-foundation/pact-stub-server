@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.3 - Add option to auto-respond to CORS pre-flight requests
+
+* a162160 - Update appveyor build to use latest rust (Ronald Holshausen, Wed Sep 20 09:50:23 2017 +1000)
+* bb7e4c0 - Add auto handling of CORS pre-flight requests (Ronald Holshausen, Wed Sep 20 09:27:36 2017 +1000)
+* 331a590 - Update crates to later versions (Ronald Holshausen, Wed Sep 20 08:53:41 2017 +1000)
+* a106a3a - bump version to 0.0.3 (Ronald Holshausen, Thu May 4 11:44:09 2017 +1000)
+
 # 0.0.2 - Bugfix Release
 
 * 280de38 - Upgraded simple_log crate to 0.4.2 and switch to a simple logger if the term logger fails dueto there not being a terminal #2 (Ronald Holshausen, Thu May 4 11:36:30 2017 +1000)
