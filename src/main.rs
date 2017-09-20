@@ -226,7 +226,7 @@ impl ServerHandler {
         match match_results.first() {
             Some(interaction) => Ok(interaction.response.clone()),
             None => {
-              if self.auto_cors && request.method.to_uppercase() == "OPTION" {
+              if self.auto_cors && request.method.to_uppercase() == "OPTIONS" {
                 Ok(Response::default_response())
               } else {
                 Err(s!("No matching request found"))
