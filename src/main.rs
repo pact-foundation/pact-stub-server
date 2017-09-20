@@ -226,7 +226,7 @@ impl ServerHandler {
         match match_results.first() {
             Some(interaction) => Ok(interaction.response.clone()),
             None => {
-              if self.auto_cors && request.method.to_uppercase() == "OPTION" {
+              if self.auto_cors && request.method.to_uppercase() == "OPTIONS" {
                 Ok(Response::default_response())
               } else {
                 Err(s!("No matching request found"))
@@ -333,7 +333,7 @@ fn handle_command_args() -> Result<(), i32> {
           .long("cors")
           .takes_value(false)
           .use_delimiter(false)
-          .help("Automatically respond to OPTION requests and return default CORS headers"));
+          .help("Automatically respond to OPTIONS requests and return default CORS headers"));
 
     let matches = app.get_matches_safe();
     match matches {
@@ -512,7 +512,7 @@ mod test {
     let handler2 = ServerHandler::new(vec![pact1.clone()], false);
 
     let request1 = Request {
-      method: s!("OPTION"),
+      method: s!("OPTIONS"),
       .. Request::default_request() };
 
     expect!(handler.find_matching_request(&request1)).to(be_ok());
