@@ -140,11 +140,10 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
 fn walkdir(dir: &Path) -> io::Result<Vec<io::Result<Pact>>> {
     let mut pacts = vec![];
     debug!("Scanning {:?}", dir);
-    for entry in try!(fs::read_dir(dir)) {
-        let entry = try!(entry);
-        let path = entry.path();
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
         if path.is_dir() {
-            try!(walkdir(&path));
+            walkdir(&path)?;
         } else {
             pacts.push(Pact::read_pact(&path))
         }
