@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.4 - Corrected CORS request method
+
+* ff47315 - Changed 'OPTION' request method to 'OPTIONS' ... and updated tests (Tom Stones, Thu Sep 21 07:52:39 2017 +1000)
+* e0259aa - Update readme (Ronald Holshausen, Wed Sep 20 10:14:44 2017 +1000)
+* 4e563ca - small code cleanup (Ronald Holshausen, Wed Sep 20 10:11:37 2017 +1000)
+* 460c8b6 - bump version to 0.0.4 (Ronald Holshausen, Wed Sep 20 10:08:09 2017 +1000)
+
 # 0.0.3 - Add option to auto-respond to CORS pre-flight requests
 
 * a162160 - Update appveyor build to use latest rust (Ronald Holshausen, Wed Sep 20 09:50:23 2017 +1000)
