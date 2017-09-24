@@ -219,15 +219,24 @@ impl ServerHandler {
           .map(|&(ref i, _)| i)
           .cloned()
           .collect::<Vec<Interaction>>();
+
         if match_results.len() > 1 {
             warn!("Found more than one pact request for method {} and path '{}', using the first one",
                 request.method, request.path);
         }
+
         match match_results.first() {
             Some(interaction) => Ok(interaction.response.clone()),
             None => {
               if self.auto_cors && request.method.to_uppercase() == "OPTIONS" {
-                Ok(Response::default_response())
+                Ok(Response {
+                  headers: Some(hashmap!{
+                    s!("Access-Control-Allow-Headers") => s!("authorization"),
+                    s!("Access-Control-Allow-Methods") => s!("GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH"),
+                    s!("Access-Control-Allow-Origin") => s!("*")
+                  }),
+                  .. Response::default_response()
+                })
               } else {
                 Err(s!("No matching request found"))
               }
