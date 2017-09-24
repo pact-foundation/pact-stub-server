@@ -1,5 +1,10 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.5 - Additional CORS headers
+
+* 6c910d9 - Added more cors headers to the options request (Ronald Holshausen, Sun Sep 24 10:02:57 2017 +1000)
+* 89c0658 - bump version to 0.0.5 (Ronald Holshausen, Thu Sep 21 10:05:32 2017 +1000)
+
 # 0.0.4 - Corrected CORS request method
 
 * ff47315 - Changed 'OPTION' request method to 'OPTIONS' ... and updated tests (Tom Stones, Thu Sep 21 07:52:39 2017 +1000)
