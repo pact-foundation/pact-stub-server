@@ -1,5 +1,11 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.6 - Updated pact_matching to latest version
+
+* 04d5416 - Updated release script (Ronald Holshausen, Mon Oct 23 09:31:04 2017 +1100)
+* 35f0cea - Updated pact_matching to latest version (Ronald Holshausen, Mon Oct 23 09:29:43 2017 +1100)
+* d358195 - bump version to 0.0.6 (Ronald Holshausen, Sun Sep 24 11:16:16 2017 +1000)
+
 # 0.0.5 - Additional CORS headers
 
 * 6c910d9 - Added more cors headers to the options request (Ronald Holshausen, Sun Sep 24 10:02:57 2017 +1000)
