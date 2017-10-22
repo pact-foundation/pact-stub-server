@@ -66,7 +66,7 @@ pub fn hyper_request_to_pact_request(req: &mut HyperRequest) -> Request {
         query: extract_query_string(&req.uri),
         headers: extract_headers(&req.headers),
         body: extract_body(req),
-        matching_rules: None
+        matching_rules: matchingrules!{}
     }
 }
 
