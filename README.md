@@ -5,7 +5,7 @@
 
 This project provides a server that can generate responses based on pact files. It is a single executable binary. It implements the [V2 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-2).
 
-[Online rust docs](https://docs.rs/pact-stub-server/)
+[Online rust docs](https://docs.rs/crate/pact-stub-server/0.0.6)
 
 The stub server works by taking all the interactions (requests and responses) from a number of pact files. For each interaction, it will compare any incoming request against those defined in the pact files. If there is a match (based on method, path and query parameters), it will return the response from the pact file.
 
