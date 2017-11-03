@@ -231,7 +231,7 @@ impl ServerHandler {
               if self.auto_cors && request.method.to_uppercase() == "OPTIONS" {
                 Ok(Response {
                   headers: Some(hashmap!{
-                    s!("Access-Control-Allow-Headers") => s!("authorization"),
+                    s!("Access-Control-Allow-Headers") => s!("authorization,Content-Type"),
                     s!("Access-Control-Allow-Methods") => s!("GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH"),
                     s!("Access-Control-Allow-Origin") => s!("*")
                   }),
