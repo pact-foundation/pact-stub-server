@@ -1,5 +1,10 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.7 - Bugfix Release
+
+* 864fd12 - Update to support the changes in pact_matching 0.3.1 (Ronald Holshausen, Mon Nov 13 12:24:14 2017 +1100)
+* b309cfa - bump version to 0.0.7 (Ronald Holshausen, Mon Oct 23 09:39:44 2017 +1100)
+
 # 0.0.6 - Updated pact_matching to latest version
 
 * 04d5416 - Updated release script (Ronald Holshausen, Mon Oct 23 09:31:04 2017 +1100)
