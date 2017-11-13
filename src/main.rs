@@ -491,13 +491,13 @@ mod test {
   #[test]
   fn match_request_returns_the_closest_match() {
     let interaction1 = Interaction { request: Request {
-      body: OptionalBody::Present(s!("{\"a\": 1, \"b\": 2, \"c\": 3}")),
+      body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into()),
       .. Request::default_request() },
       response: Response { status: 200, .. Response::default_response() },
       .. Interaction::default() };
 
     let interaction2 = Interaction { request: Request {
-      body: OptionalBody::Present(s!("{\"a\": 2, \"b\": 4, \"c\": 6}")),
+      body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into()),
       .. Request::default_request() },
       response: Response { status: 201, .. Response::default_response() },
       .. Interaction::default() };
@@ -507,7 +507,7 @@ mod test {
     let handler = ServerHandler::new(vec![pact1, pact2], false);
 
     let request1 = Request {
-      body: OptionalBody::Present(s!("{\"a\": 1, \"b\": 4, \"c\": 6}")),
+      body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
       .. Request::default_request() };
 
     expect!(handler.find_matching_request(&request1)).to(be_ok().value(interaction2.response));
