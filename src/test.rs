@@ -3,6 +3,7 @@ use rand::Rng;
 use super::{integer_value, ServerHandler};
 use expectest::prelude::*;
 use pact_matching::models::{Pact, Interaction, Request, Response, OptionalBody};
+use models::matchingrules::*;
 
 #[test]
 fn validates_integer_value() {
@@ -87,6 +88,43 @@ fn match_request_excludes_requests_with_different_query_params() {
     .. Request::default_request() };
 
   expect!(handler.find_matching_request(&request1)).to(be_err());
+}
+
+#[test]
+fn match_request_excludes_put_or_post_requests_with_different_bodies() {
+  let interaction1 = Interaction { request: Request {
+    method: s!("PUT"),
+    body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into()),
+    .. Request::default_request() },
+    response: Response { status: 200, .. Response::default_response() },
+    .. Interaction::default() };
+
+  let interaction2 = Interaction { request: Request {
+    method: s!("PUT"),
+    body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into()),
+    matching_rules: matchingrules!{
+        "body" => {
+            "$.c" => [ MatchingRule::Integer ]
+        }
+    },
+    .. Request::default_request() },
+    response: Response { status: 201, .. Response::default_response() },
+    .. Interaction::default() };
+
+  let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
+  let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+  let handler = ServerHandler::new(vec![pact1, pact2], false);
+
+  let request1 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into()),
+    .. Request::default_request() };
+  let request2 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 5, \"c\": 3}".as_bytes().into()),
+    .. Request::default_request() };
+  let request3 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 16}".as_bytes().into()),
+    .. Request::default_request() };
+
+  expect!(handler.find_matching_request(&request1)).to(be_ok());
+  expect!(handler.find_matching_request(&request2)).to(be_err());
+  expect!(handler.find_matching_request(&request3)).to(be_ok());
 }
 
 #[test]

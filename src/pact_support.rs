@@ -66,12 +66,13 @@ pub fn hyper_request_to_pact_request(req: &mut HyperRequest) -> Request {
         query: extract_query_string(&req.uri),
         headers: extract_headers(&req.headers),
         body: extract_body(req),
-        matching_rules: matchingrules!{}
+        .. Request::default_request()
     }
 }
 
 pub fn pact_response_to_hyper_response(mut res: HyperResponse, response: &Response) {
-    info!("Sending response {:?}", response);
+    info!("<=== Sending response {:?}", response);
+    info!("     body '{}'\n\n", response.body.str_value());
     *res.status_mut() = StatusCode::from_u16(response.status);
     res.headers_mut().set(AccessControlAllowOrigin::Any);
     res.headers_mut().set(

@@ -102,7 +102,7 @@ fn main() {
 
 fn print_version() {
     println!("\npact stub server version  : v{}", crate_version!());
-    println!("pact specification version: v{}", PactSpecification::V2.version_str());
+    println!("pact specification version: v{}", PactSpecification::V3.version_str());
 }
 
 fn integer_value(v: String) -> Result<(), String> {
@@ -188,6 +188,13 @@ fn load_pacts(sources: Vec<PactSource>) -> Vec<Result<Pact, String>> {
     .collect()
 }
 
+fn method_supports_payload(request: &Request) -> bool {
+  match request.method.to_uppercase().as_str() {
+    "POST" | "PUT" | "PATCH" => true,
+    _ => false
+  }
+}
+
 struct ServerHandler {
   sources: Arc<Vec<Pact>>,
   auto_cors: bool
@@ -211,6 +218,7 @@ impl ServerHandler {
               &Mismatch::MethodMismatch { .. } => false,
               &Mismatch::PathMismatch { .. } => false,
               &Mismatch::QueryMismatch { .. } => false,
+              &Mismatch::BodyMismatch { .. } => !method_supports_payload(request),
               _ => true
             }
           }))
@@ -226,7 +234,7 @@ impl ServerHandler {
         }
 
         match match_results.first() {
-            Some(interaction) => Ok(interaction.response.clone()),
+            Some(interaction) => Ok(pact_matching::generate_response(&interaction.response)),
             None => {
               if self.auto_cors && request.method.to_uppercase() == "OPTIONS" {
                 Ok(Response {
@@ -249,11 +257,12 @@ impl Handler for ServerHandler {
 
     fn handle(&self, mut req: HyperRequest, mut res: HyperResponse) {
         let request = pact_support::hyper_request_to_pact_request(&mut req);
-        info!("Received request: {:?}", request);
+        info!("\n===> Received request: {:?}", request);
+        info!("                   body: '{}'\n", request.body.str_value());
         match self.find_matching_request(&request) {
             Ok(ref response) => pact_support::pact_response_to_hyper_response(res, response),
             Err(msg) => {
-                warn!("{}", msg);
+                warn!("{}, sending {}", msg, StatusCode::NotFound);
                 *res.status_mut() = StatusCode::NotFound;
             }
         }
@@ -374,10 +383,7 @@ fn handle_command_args() -> Result<(), i32> {
                     println!();
                     Ok(())
                 },
-                _ => {
-                    println!("{}", err.message);
-                    err.exit()
-                }
+                _ => err.exit()
             }
         }
     }
