@@ -3,18 +3,21 @@
 [![Build Status](https://travis-ci.org/uglyog/pact-stub-server.svg?branch=master)](https://travis-ci.org/uglyog/pact-stub-server)
 [![Windows Build status](https://ci.appveyor.com/api/projects/status/vigbo2qdyk9x7mo9?svg=true)](https://ci.appveyor.com/project/uglyog/pact-stub-server)
 
-This project provides a server that can generate responses based on pact files. It is a single executable binary. It implements the [V2 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-2).
+This project provides a server that can generate responses based on pact files. It is a single executable binary. 
+It implements the [V3 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-3).
 
-[Online rust docs](https://docs.rs/crate/pact-stub-server/0.0.6)
+[Online rust docs](https://docs.rs/crate/pact-stub-server/0.0.8)
 
-The stub server works by taking all the interactions (requests and responses) from a number of pact files. For each interaction, it will compare any incoming request against those defined in the pact files. If there is a match (based on method, path and query parameters), it will return the response from the pact file.
+The stub server works by taking all the interactions (requests and responses) from a number of pact files. 
+For each interaction, it will compare any incoming request against those defined in the pact files. If there is a match 
+(based on method, path and query parameters), it will return the response from the pact file.
 
 ## Command line interface
 
 The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this with out any options displays the standard help.
 
 ```console
-pact-stub-server v0.0.3
+pact-stub-server v0.0.8
 Pact Stub Server
 
 USAGE:

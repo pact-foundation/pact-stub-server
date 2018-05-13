@@ -317,7 +317,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "pact-stub-server"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "expectest 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
