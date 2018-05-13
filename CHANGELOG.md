@@ -1,5 +1,17 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.8 - Upgrade to V3 spec + bugfixes
+
+* 4f1a3fe - fix: for PUT, POST and PATCH requests, return the first response if there is no body #10 (Ronald Holshausen, Sun May 13 15:02:45 2018 +1000)
+* f3ffc83 - fix: for PUT, POST and PATCH requests, also check the body of the request #10 (Ronald Holshausen, Sun May 13 14:51:29 2018 +1000)
+* 1780c3d - Moved the tests to a seperate file (Ronald Holshausen, Fri May 11 08:25:07 2018 +1000)
+* ef8ec2c - Merge pull request #7 from stones/fix/cors-content-type-headers (Ronald Holshausen, Mon Nov 13 15:15:25 2017 +1100)
+* 406bdd0 - Merge pull request #6 from stepan-leibo/patch-1 (Ronald Holshausen, Mon Nov 13 15:14:20 2017 +1100)
+* a726e20 - bump version to 0.0.8 (Ronald Holshausen, Mon Nov 13 12:35:03 2017 +1100)
+* 1d5c076 - Added 'Content-Type' to allowed headers to allow POST requests to have json bodies (Tom Stones, Fri Nov 3 15:01:41 2017 +1100)
+* 627093a - Split release-osx into separate osx/ios shell scripts (Tom Stones, Fri Nov 3 14:52:55 2017 +1100)
+* dbb239d - Fix online rust docs (Stepan Leibo, Thu Oct 26 14:50:44 2017 +0100)
+
 # 0.0.7 - Bugfix Release
 
 * 864fd12 - Update to support the changes in pact_matching 0.3.1 (Ronald Holshausen, Mon Nov 13 12:24:14 2017 +1100)
