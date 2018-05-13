@@ -121,10 +121,13 @@ fn match_request_excludes_put_or_post_requests_with_different_bodies() {
     .. Request::default_request() };
   let request3 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 16}".as_bytes().into()),
     .. Request::default_request() };
+  let request4 = Request { method: s!("PUT"), headers: Some(hashmap!{ s!("Content-Type") => s!("application/json") }),
+    .. Request::default_request() };
 
   expect!(handler.find_matching_request(&request1)).to(be_ok());
   expect!(handler.find_matching_request(&request2)).to(be_err());
   expect!(handler.find_matching_request(&request3)).to(be_ok());
+  expect!(handler.find_matching_request(&request4)).to(be_ok());
 }
 
 #[test]

@@ -1,0 +1,66 @@
+{
+  "provider": {
+    "name": "test_provider"
+  },
+  "consumer": {
+    "name": "test_consumer"
+  },
+  "interactions": [
+    {
+      "providerState": "test state",
+      "description": "test interaction",
+      "request": {
+        "method": "POST",
+        "path": "/",
+        "body": {
+          "complete": {
+            "certificateUri": "http://...",
+            "issues": {
+              "idNotFound": {}
+            },
+            "nevdis": {
+              "body": null,
+              "colour": null,
+              "engine": null
+            },
+            "body": 123456
+          },
+          "body": [
+            1,
+            2,
+            3
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": "Response 1"
+      }
+    },
+    {
+      "providerState": "test state",
+      "description": "test interaction 2",
+      "request": {
+        "method": "POST",
+        "path": "/",
+        "body": {
+          "a": 1,
+          "b": 2,
+          "c": 3
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": "Response 2"
+      }
+    }
+  ],
+  "metadata": {
+    "pact-specification": {
+      "version": "2.0.0"
+    },
+    "pact-jvm": {
+      "version": ""
+    }
+  }
+}

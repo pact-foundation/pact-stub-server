@@ -58,7 +58,7 @@
 #![warn(missing_docs)]
 
 #[macro_use] extern crate clap;
-#[macro_use] extern crate p_macro;
+#[macro_use] #[allow(unused_imports)] extern crate p_macro;
 #[macro_use] extern crate log;
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate pact_matching;
@@ -218,7 +218,7 @@ impl ServerHandler {
               &Mismatch::MethodMismatch { .. } => false,
               &Mismatch::PathMismatch { .. } => false,
               &Mismatch::QueryMismatch { .. } => false,
-              &Mismatch::BodyMismatch { .. } => !method_supports_payload(request),
+              &Mismatch::BodyMismatch { .. } => !(method_supports_payload(request) && request.body.is_present()),
               _ => true
             }
           }))
