@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.9 - Bugfix Release
+
+* 4b66646 - fix: upgrade the pact matching to support query parameters with path expressions #11 (Ronald Holshausen, Sat Jun 30 17:19:39 2018 +1000)
+* 65c32e2 - doc: updated the readme (Ronald Holshausen, Sun May 13 15:45:50 2018 +1000)
+* a6137e8 - chore: update appveyor build to use rustup (Ronald Holshausen, Sun May 13 15:38:56 2018 +1000)
+* 5424e27 - bump version to 0.0.9 (Ronald Holshausen, Sun May 13 15:37:56 2018 +1000)
+
 # 0.0.8 - Upgrade to V3 spec + bugfixes
 
 * 4f1a3fe - fix: for PUT, POST and PATCH requests, return the first response if there is no body #10 (Ronald Holshausen, Sun May 13 15:02:45 2018 +1000)
