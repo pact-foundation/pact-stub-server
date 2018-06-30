@@ -169,3 +169,41 @@ fn with_auto_cors_return_200_with_an_option_request() {
   expect!(handler.find_matching_request(&request1)).to(be_ok());
   expect!(handler2.find_matching_request(&request1)).to(be_err());
 }
+
+#[test]
+fn match_request_with_query_params() {
+  let matching_rules = matchingrules!{
+    "query" => {
+        "page[0]" => [ MatchingRule::Type ]
+    }
+  };
+  let interaction1 = Interaction {
+    request: Request {
+      path: s!("/api/objects"),
+      query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
+      .. Request::default_request()
+    },
+    .. Interaction::default()
+  };
+
+  let interaction2 = Interaction {
+    request: Request {
+      path: s!("/api/objects"),
+      query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
+      matching_rules,
+      .. Request::default_request()
+    },
+    .. Interaction::default()
+  };
+
+  let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
+  let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+  let handler = ServerHandler::new(vec![pact1, pact2], false);
+
+  let request1 = Request {
+    path: s!("/api/objects"),
+    query: Some(hashmap!{ s!("page") => vec![ s!("3") ] }),
+    .. Request::default_request() };
+
+  expect!(handler.find_matching_request(&request1)).to(be_ok());
+}
