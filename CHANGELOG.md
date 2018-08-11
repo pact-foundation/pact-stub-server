@@ -1,5 +1,10 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.0.10 - Bugfix Release
+
+* 7f17c68 - fix: update to pact-matching 0.4.4 (Ronald Holshausen, Sat Aug 11 15:25:07 2018 +1000)
+* e369261 - bump version to 0.0.10 (Ronald Holshausen, Sat Jun 30 17:27:45 2018 +1000)
+
 # 0.0.9 - Bugfix Release
 
 * 4b66646 - fix: upgrade the pact matching to support query parameters with path expressions #11 (Ronald Holshausen, Sat Jun 30 17:19:39 2018 +1000)
