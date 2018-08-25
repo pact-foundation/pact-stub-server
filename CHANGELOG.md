@@ -1,5 +1,13 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.1.0 - Support for loading pacts from HTTPS
+
+* a2af4ef - doc: update readme (Ronald Holshausen, Sat Aug 25 21:11:15 2018 +1000)
+* 8da3496 - feat: bump minor version (Ronald Holshausen, Sat Aug 25 21:02:26 2018 +1000)
+* 1f2855e - feat: implemented support for fetching pacts using HTTPS #13 (Ronald Holshausen, Sat Aug 25 20:58:32 2018 +1000)
+* 5bb6dbd - refactor: Upgrade hyper crate to 0.12 #13 (Ronald Holshausen, Sat Aug 25 17:32:38 2018 +1000)
+* b5cdeb2 - bump version to 0.0.11 (Ronald Holshausen, Sat Aug 11 15:33:18 2018 +1000)
+
 # 0.0.10 - Bugfix Release
 
 * 7f17c68 - fix: update to pact-matching 0.4.4 (Ronald Holshausen, Sat Aug 11 15:25:07 2018 +1000)
