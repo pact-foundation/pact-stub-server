@@ -58,38 +58,39 @@
 #![warn(missing_docs)]
 
 #[macro_use] extern crate clap;
-#[macro_use] #[allow(unused_imports)] extern crate p_macro;
-#[macro_use] extern crate log;
-#[macro_use] extern crate maplit;
-#[macro_use] extern crate pact_matching;
-extern crate simplelog;
-extern crate hyper;
-extern crate serde_json;
-extern crate itertools;
-
 #[cfg(test)]
 #[macro_use(expect)]
 extern crate expectest;
-#[cfg(test)]
-extern crate rand;
+extern crate hyper;
+extern crate http;
+extern crate itertools;
+#[macro_use] extern crate log;
+#[macro_use] extern crate maplit;
+#[macro_use] #[allow(unused_imports)] extern crate p_macro;
+#[macro_use] extern crate pact_matching;
 #[cfg(test)]
 extern crate quickcheck;
+#[cfg(test)]
+extern crate rand;
+extern crate serde_json;
+extern crate simplelog;
 
-use std::env;
-use clap::{Arg, App, AppSettings, ErrorKind, ArgMatches};
-use log::LogLevelFilter;
-use simplelog::{TermLogger, SimpleLogger, Config};
-use std::str::FromStr;
-use hyper::server::{Handler, Server, Request as HyperRequest, Response as HyperResponse};
-use hyper::client::Client;
-use hyper::status::StatusCode;
-use pact_matching::models::{PactSpecification, Pact, Interaction, Request, Response};
-use pact_matching::*;
-use std::sync::Arc;
-use std::path::Path;
-use std::io;
-use std::fs;
+use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
 use itertools::Itertools;
+use log::LogLevelFilter;
+use pact_matching::*;
+use pact_matching::models::{Interaction, Pact, PactSpecification, Request, Response};
+use simplelog::{Config, SimpleLogger, TermLogger};
+use std::env;
+use std::fs;
+use std::io;
+use std::path::Path;
+use std::str::FromStr;
+use std::sync::Arc;
+use hyper::{Body, Request as HyperRequest, Response as HyperResponse, Server};
+use hyper::service::service_fn_ok;
+use hyper::rt::{self, Future};
+use http::StatusCode;
 
 mod pact_support;
 
@@ -152,19 +153,20 @@ fn walkdir(dir: &Path) -> io::Result<Vec<io::Result<Pact>>> {
 }
 
 fn pact_from_url(url: &String) -> Result<Pact, String> {
-    let client = Client::new();
-    match client.get(url).send() {
-        Ok(mut res) => if res.status.is_success() {
-                let pact_json = serde_json::from_reader(&mut res);
-                match pact_json {
-                    Ok(ref json) => Ok(Pact::from_json(url, json)),
-                    Err(err) => Err(format!("Failed to parse Pact JSON - {}", err))
-                }
-            } else {
-                Err(format!("Request failed with status - {}", res.status))
-            },
-        Err(err) => Err(format!("Request failed - {}", err))
-    }
+//    let client = Client::new();
+//    match client.get(url).send() {
+//        Ok(mut res) => if res.status.is_success() {
+//                let pact_json = serde_json::from_reader(&mut res);
+//                match pact_json {
+//                    Ok(ref json) => Ok(Pact::from_json(url, json)),
+//                    Err(err) => Err(format!("Failed to parse Pact JSON - {}", err))
+//                }
+//            } else {
+//                Err(format!("Request failed with status - {}", res.status))
+//            },
+//        Err(err) => Err(format!("Request failed - {}", err))
+//    }
+    unimplemented!()
 }
 
 fn load_pacts(sources: Vec<PactSource>) -> Vec<Result<Pact, String>> {
@@ -251,38 +253,33 @@ impl ServerHandler {
             }
         }
     }
-}
 
-impl Handler for ServerHandler {
-
-    fn handle(&self, mut req: HyperRequest, mut res: HyperResponse) {
+    fn handle(&self, mut req: HyperRequest<Body>) -> HyperResponse<Body> {
         let request = pact_support::hyper_request_to_pact_request(&mut req);
         info!("\n===> Received request: {:?}", request);
         info!("                   body: '{}'\n", request.body.str_value());
         match self.find_matching_request(&request) {
-            Ok(ref response) => pact_support::pact_response_to_hyper_response(res, response),
+            Ok(ref response) => pact_support::pact_response_to_hyper_response(response),
             Err(msg) => {
-                warn!("{}, sending {}", msg, StatusCode::NotFound);
-                *res.status_mut() = StatusCode::NotFound;
+                warn!("{}, sending {}", msg, StatusCode::NOT_FOUND);
+                HyperResponse::builder().status(StatusCode::NOT_FOUND).body(Body::empty()).unwrap()
             }
         }
     }
 }
 
 fn start_server(port: u16, sources: Vec<Pact>, auto_cors: bool) -> Result<(), i32> {
-    match Server::http(format!("0.0.0.0:{}", port).as_str()) {
-        Ok(mut server) => {
-            server.keep_alive(None);
-            match server.handle(ServerHandler::new(sources, auto_cors)) {
-                Ok(listener) => {
-                    info!("Server started on port {}", listener.socket.port());
-                    Ok(())
-                },
-                Err(err) => {
-                    error!("could not bind listener to port: {}", err);
-                    Err(2)
-                }
-            }
+    let addr = ([0, 0, 0, 0], port).into();
+    match Server::try_bind(&addr) {
+        Ok(builder) => {
+            let server = builder.http1_keepalive(false)
+                .serve(move || {
+                    let service_handler = ServerHandler::new(sources.clone(), auto_cors);
+                    service_fn_ok(move |req| service_handler.handle(req))
+                });
+            info!("Server started on port {}", server.local_addr().port());
+            rt::run(server.map_err(|err| error!("could not start server: {}", err)));
+            Ok(())
         },
         Err(err) => {
             error!("could not start server: {}", err);
