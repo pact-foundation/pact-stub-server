@@ -6,7 +6,7 @@
 This project provides a server that can generate responses based on pact files. It is a single executable binary. 
 It implements the [V3 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-3).
 
-[Online rust docs](https://docs.rs/crate/pact-stub-server/0.0.8)
+[Online rust docs](https://docs.rs/crate/pact-stub-server/0.1.0)
 
 The stub server works by taking all the interactions (requests and responses) from a number of pact files. 
 For each interaction, it will compare any incoming request against those defined in the pact files. If there is a match 
@@ -17,7 +17,7 @@ For each interaction, it will compare any incoming request against those defined
 The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this with out any options displays the standard help.
 
 ```console
-pact-stub-server v0.0.8
+pact-stub-server v0.1.0
 Pact Stub Server
 
 USAGE:
@@ -34,6 +34,7 @@ OPTIONS:
     -l, --loglevel <loglevel>    Log level (defaults to info) [values: error, warn, info, debug, trace, none]
     -p, --port <port>            Port to run on (defaults to random port assigned by the OS)
     -u, --url <url>...           URL of pact file to verify (can be repeated)
+        --user <user>            User and password to use when fetching pacts from URLS in user:password form
 ```
 
 ## Options
@@ -55,6 +56,8 @@ You can specify the pacts to verify with the following options. They can be repe
 | `-f, --file <file>` | File | Loads a pact from the given file |
 | `-u, --url <url>` | URL | Loads a pact from a URL resource |
 | `-d, --dir <dir>` | Directory | Loads all the pacts from the given directory |
+
+*Note:* For URLs that are authenticated, you can use the `--user` option to set the username and password.
 
 ### Server Options
 
