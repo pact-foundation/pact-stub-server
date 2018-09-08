@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.1.1 - Bugfix Release
+
+* 7e1e64e - fix: only add a cors origin header if there is not one #15 (Ronald Holshausen, Sat Sep 8 15:37:32 2018 +1000)
+* 6f110ed - fix: add some tests around content type header #14 (Ronald Holshausen, Sat Sep 8 15:25:37 2018 +1000)
+* 180f30d - fix: remove static content type header #14 (Ronald Holshausen, Sat Sep 8 14:50:26 2018 +1000)
+* bbc91a9 - bump version to 0.1.1 (Ronald Holshausen, Sat Aug 25 21:45:14 2018 +1000)
+
 # 0.1.0 - Support for loading pacts from HTTPS
 
 * a2af4ef - doc: update readme (Ronald Holshausen, Sat Aug 25 21:11:15 2018 +1000)
