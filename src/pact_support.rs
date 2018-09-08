@@ -52,9 +52,7 @@ pub fn pact_response_to_hyper_response(response: &Response) -> HyperResponse<Bod
     info!("     body '{}'\n\n", response.body.str_value());
     let mut res = HyperResponse::builder();
     {
-        res
-            .status(response.status)
-            .header(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+        res.status(response.status);
 
         match response.headers {
             Some(ref headers) => {
@@ -63,6 +61,10 @@ pub fn pact_response_to_hyper_response(response: &Response) -> HyperResponse<Bod
                 }
             },
             None => ()
+        }
+
+        if !response.has_header(&ACCESS_CONTROL_ALLOW_ORIGIN.as_str().into()) {
+            res.header(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
         }
 
         match response.body {
@@ -97,6 +99,7 @@ mod test {
 
         expect!(hyper_response.status()).to(be_equal_to(StatusCode::CREATED));
         expect!(hyper_response.headers().len()).to(be_equal_to(1));
+        expect!(hyper_response.headers().get("Access-Control-Allow-Origin")).to(be_some().value(HeaderValue::from_static("*")));
     }
 
     #[test]
@@ -126,4 +129,15 @@ mod test {
         expect!(hyper_response.headers().get("content-type")).to(be_some().value(HeaderValue::from_static("application/json")));
     }
 
+    #[test]
+    fn only_add_a_cors_origin_header_if_one_has_not_already_been_provided() {
+        let response = Response {
+            headers: Some(hashmap! { s!("Access-Control-Allow-Origin") => s!("dodgy.com") }),
+            .. Response::default_response()
+        };
+        let hyper_response = pact_response_to_hyper_response(&response);
+
+        expect!(hyper_response.headers().len()).to(be_equal_to(1));
+        expect!(hyper_response.headers().get("Access-Control-Allow-Origin")).to(be_some().value(HeaderValue::from_static("dodgy.com")));
+    }
 }
