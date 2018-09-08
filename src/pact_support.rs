@@ -3,7 +3,7 @@ use http::header::HeaderValue;
 use http::header::{ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE};
 use hyper::{Body, Request as HyperRequest, Response as HyperResponse};
 use hyper::rt::{Future, Stream};
-use pact_matching::models::{OptionalBody, Request, Response};
+use pact_matching::models::{OptionalBody, Request, Response, HttpPart};
 use pact_matching::models::parse_query_string;
 use std::collections::HashMap;
 
@@ -54,8 +54,7 @@ pub fn pact_response_to_hyper_response(response: &Response) -> HyperResponse<Bod
     {
         res
             .status(response.status)
-            .header(ACCESS_CONTROL_ALLOW_ORIGIN, "*")
-            .header(CONTENT_TYPE, "application/javascript; charset=utf-8");
+            .header(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
 
         match response.headers {
             Some(ref headers) => {
@@ -67,7 +66,12 @@ pub fn pact_response_to_hyper_response(response: &Response) -> HyperResponse<Bod
         }
 
         match response.body {
-            OptionalBody::Present(ref body) => res.body(Body::from(body.clone())),
+            OptionalBody::Present(ref body) => {
+                if !response.has_header(&CONTENT_TYPE.as_str().into()) {
+                    res.header(CONTENT_TYPE, response.content_type());
+                }
+                res.body(Body::from(body.clone()))
+            },
             _ => res.body(Body::empty())
         }.unwrap()
     }
