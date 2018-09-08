@@ -76,3 +76,54 @@ pub fn pact_response_to_hyper_response(response: &Response) -> HyperResponse<Bod
         }.unwrap()
     }
 }
+
+#[cfg(test)]
+mod test {
+
+    use expectest::prelude::*;
+    use super::*;
+    use pact_matching::models::{OptionalBody, Response};
+    use http::status::StatusCode;
+    use http::header::HeaderValue;
+
+    #[test]
+    fn test_response() {
+        let response = Response {
+            status: 201,
+            headers: Some(hashmap! {  }),
+            .. Response::default_response()
+        };
+        let hyper_response = pact_response_to_hyper_response(&response);
+
+        expect!(hyper_response.status()).to(be_equal_to(StatusCode::CREATED));
+        expect!(hyper_response.headers().len()).to(be_equal_to(1));
+    }
+
+    #[test]
+    fn test_response_with_content_type() {
+        let response = Response {
+            status: 201,
+            headers: Some(hashmap! { s!("Content-Type") => s!("text/dizzy") }),
+            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
+            .. Response::default_response()
+        };
+        let hyper_response = pact_response_to_hyper_response(&response);
+
+        expect!(hyper_response.status()).to(be_equal_to(StatusCode::CREATED));
+        expect!(hyper_response.headers().is_empty()).to(be_false());
+        expect!(hyper_response.headers().get("content-type")).to(be_some().value(HeaderValue::from_static("text/dizzy")));
+    }
+
+    #[test]
+    fn adds_a_content_type_if_there_is_not_one_and_there_is_a_body() {
+        let response = Response {
+            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
+            .. Response::default_response()
+        };
+        let hyper_response = pact_response_to_hyper_response(&response);
+
+        expect!(hyper_response.headers().is_empty()).to(be_false());
+        expect!(hyper_response.headers().get("content-type")).to(be_some().value(HeaderValue::from_static("application/json")));
+    }
+
+}
