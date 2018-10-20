@@ -79,27 +79,23 @@ extern crate simplelog;
 extern crate base64;
 
 use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
-use http::StatusCode;
-use hyper::{Body, Request as HyperRequest, Response as HyperResponse, Server};
+use hyper::{Body, Request as HyperRequest};
 use hyper::Client;
 use hyper_tls::HttpsConnector;
 use hyper::rt::{Future, Stream};
-use hyper::service::service_fn_ok;
-use itertools::Itertools;
 use log::LogLevelFilter;
-use pact_matching::*;
-use pact_matching::models::{Interaction, Pact, PactSpecification, Request, Response};
+use pact_matching::models::{Pact, PactSpecification};
 use simplelog::{Config, SimpleLogger, TermLogger};
 use std::env;
 use std::fs;
 use std::io;
 use std::path::Path;
 use std::str::FromStr;
-use std::sync::Arc;
 use tokio::runtime::Runtime;
 use base64::encode;
 
 mod pact_support;
+mod server;
 
 fn main() {
     match handle_command_args() {
@@ -219,112 +215,6 @@ fn load_pacts(sources: Vec<PactSource>, runtime: &mut Runtime) -> Vec<Result<Pac
     .collect()
 }
 
-fn method_supports_payload(request: &Request) -> bool {
-  match request.method.to_uppercase().as_str() {
-    "POST" | "PUT" | "PATCH" => true,
-    _ => false
-  }
-}
-
-struct ServerHandler {
-  sources: Arc<Vec<Pact>>,
-  auto_cors: bool
-}
-
-impl ServerHandler {
-    fn new(sources: Vec<Pact>, auto_cors: bool) -> ServerHandler {
-        ServerHandler {
-          sources: Arc::new(sources),
-          auto_cors
-        }
-    }
-
-    fn find_matching_request(&self, request: &Request) -> Result<Response, String> {
-        let match_results = self.sources
-          .iter()
-          .flat_map(|pact| pact.interactions.clone())
-          .map(|i| (i.clone(), pact_matching::match_request(i.request, request.clone())))
-          .filter(|&(_, ref mismatches)| mismatches.iter().all(|mismatch|{
-            match mismatch {
-              &Mismatch::MethodMismatch { .. } => false,
-              &Mismatch::PathMismatch { .. } => false,
-              &Mismatch::QueryMismatch { .. } => false,
-              &Mismatch::BodyMismatch { .. } => !(method_supports_payload(request) && request.body.is_present()),
-              _ => true
-            }
-          }))
-          .sorted_by(|a, b| Ord::cmp(&a.1.len(), &b.1.len()))
-          .iter()
-          .map(|&(ref i, _)| i)
-          .cloned()
-          .collect::<Vec<Interaction>>();
-
-        if match_results.len() > 1 {
-            warn!("Found more than one pact request for method {} and path '{}', using the first one",
-                request.method, request.path);
-        }
-
-        match match_results.first() {
-            Some(interaction) => Ok(pact_matching::generate_response(&interaction.response)),
-            None => {
-              if self.auto_cors && request.method.to_uppercase() == "OPTIONS" {
-                Ok(Response {
-                  headers: Some(hashmap!{
-                    s!("Access-Control-Allow-Headers") => s!("authorization,Content-Type"),
-                    s!("Access-Control-Allow-Methods") => s!("GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH"),
-                    s!("Access-Control-Allow-Origin") => s!("*")
-                  }),
-                  .. Response::default_response()
-                })
-              } else {
-                Err(s!("No matching request found"))
-              }
-            }
-        }
-    }
-
-    fn handle(&self, mut req: HyperRequest<Body>) -> HyperResponse<Body> {
-        let request = pact_support::hyper_request_to_pact_request(&mut req);
-        info!("\n===> Received request: {:?}", request);
-        info!("                   body: '{}'\n", request.body.str_value());
-        match self.find_matching_request(&request) {
-            Ok(ref response) => pact_support::pact_response_to_hyper_response(response),
-            Err(msg) => {
-                warn!("{}, sending {}", msg, StatusCode::NOT_FOUND);
-                let mut builder = HyperResponse::builder();
-                builder.status(StatusCode::NOT_FOUND);
-                if self.auto_cors {
-                    builder.header("Access-Control-Allow-Origin", "*");
-                }
-                builder.body(Body::empty()).unwrap()
-            }
-        }
-    }
-}
-
-fn start_server(port: u16, sources: Vec<Pact>, auto_cors: bool, runtime: &mut Runtime) -> Result<(), i32> {
-    let addr = ([0, 0, 0, 0], port).into();
-    match Server::try_bind(&addr) {
-        Ok(builder) => {
-            let server = builder.http1_keepalive(false)
-                .serve(move || {
-                    let service_handler = ServerHandler::new(sources.clone(), auto_cors);
-                    service_fn_ok(move |req| service_handler.handle(req))
-                });
-            info!("Server started on port {}", server.local_addr().port());
-            runtime.block_on(server.map_err(|err| error!("could not start server: {}", err)))
-                .map_err(|_| {
-                    format!("error occurred scheduling server future on Tokio runtime");
-                    2
-                })
-        },
-        Err(err) => {
-            error!("could not start server: {}", err);
-            Err(1)
-        }
-    }
-}
-
 fn handle_command_args() -> Result<(), i32> {
     let args: Vec<String> = env::args().collect();
     let program = args[0].clone();
@@ -412,7 +302,7 @@ fn handle_command_args() -> Result<(), i32> {
                 Err(3)
             } else {
                 let port = matches.value_of("port").unwrap_or("0").parse::<u16>().unwrap();
-                start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect(),
+                server::start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect(),
                              matches.is_present("cors"), &mut tokio_runtime)
             }
         },
