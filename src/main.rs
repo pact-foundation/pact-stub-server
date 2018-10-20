@@ -291,7 +291,12 @@ impl ServerHandler {
             Ok(ref response) => pact_support::pact_response_to_hyper_response(response),
             Err(msg) => {
                 warn!("{}, sending {}", msg, StatusCode::NOT_FOUND);
-                HyperResponse::builder().status(StatusCode::NOT_FOUND).body(Body::empty()).unwrap()
+                let mut builder = HyperResponse::builder();
+                builder.status(StatusCode::NOT_FOUND);
+                if self.auto_cors {
+                    builder.header("Access-Control-Allow-Origin", "*");
+                }
+                builder.body(Body::empty()).unwrap()
             }
         }
     }
