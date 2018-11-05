@@ -1,5 +1,13 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.2.0 - Bugfix Release
+
+* 40f83a2 - chore: bump version to next minor (Ronald Holshausen, Mon Nov 5 15:48:16 2018 +1100)
+* 0699283 - fix: Use a chain of futures so reading the body does not block the event loop #18 #16 (Ronald Holshausen, Mon Nov 5 15:39:49 2018 +1100)
+* 075e391 - refactor: split the server code into its own module (Ronald Holshausen, Sat Oct 20 12:21:56 2018 +1100)
+* de67be8 - Respect 'auto_cors' even if there is no match (Sebastian Thiel, Fri Oct 12 08:46:26 2018 +0200)
+* 616c02a - bump version to 0.1.2 (Ronald Holshausen, Sat Sep 8 15:54:23 2018 +1000)
+
 # 0.1.1 - Bugfix Release
 
 * 7e1e64e - fix: only add a cors origin header if there is not one #15 (Ronald Holshausen, Sat Sep 8 15:37:32 2018 +1000)
