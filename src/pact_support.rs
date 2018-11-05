@@ -1,9 +1,9 @@
 use http::{HeaderMap, Uri};
-use http::header::HeaderValue;
 use http::header::{ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE};
-use hyper::{Body, Request as HyperRequest, Response as HyperResponse};
-use hyper::rt::{Future, Stream};
-use pact_matching::models::{OptionalBody, Request, Response, HttpPart};
+use http::header::HeaderValue;
+use http::request::Parts;
+use hyper::{Body, Response as HyperResponse};
+use pact_matching::models::{HttpPart, OptionalBody, Request, Response};
 use pact_matching::models::parse_query_string;
 use std::collections::HashMap;
 
@@ -22,27 +22,13 @@ fn extract_headers(headers: &HeaderMap<HeaderValue>) -> Option<HashMap<String, S
     }
 }
 
-fn extract_body(req: &mut Body) -> OptionalBody {
-    match req.by_ref().concat2().wait() {
-        Ok(chunk) => if chunk.is_empty() {
-            OptionalBody::Empty
-        } else {
-            OptionalBody::Present(chunk.iter().cloned().collect())
-        },
-        Err(err) => {
-            warn!("Failed to read request body: {}", err);
-            OptionalBody::Empty
-        }
-    }
-}
-
-pub fn hyper_request_to_pact_request(req: &mut HyperRequest<Body>) -> Request {
+pub fn hyper_request_to_pact_request(req: Parts, body: OptionalBody) -> Request {
     Request {
-        method: req.method().to_string(),
-        path: req.uri().path().to_string(),
-        query: extract_query_string(req.uri()),
-        headers: extract_headers(req.headers()),
-        body: extract_body(req.body_mut()),
+        method: req.method.to_string(),
+        path: req.uri.path().to_string(),
+        query: extract_query_string(&req.uri),
+        headers: extract_headers(&req.headers),
+        body,
         .. Request::default_request()
     }
 }
@@ -81,12 +67,11 @@ pub fn pact_response_to_hyper_response(response: &Response) -> HyperResponse<Bod
 
 #[cfg(test)]
 mod test {
-
     use expectest::prelude::*;
-    use super::*;
-    use pact_matching::models::{OptionalBody, Response};
-    use http::status::StatusCode;
     use http::header::HeaderValue;
+    use http::status::StatusCode;
+    use pact_matching::models::{OptionalBody, Response};
+    use super::*;
 
     #[test]
     fn test_response() {
