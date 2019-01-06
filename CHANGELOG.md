@@ -1,5 +1,10 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.2.1 - Bugfix Release
+
+* f5870d5 - fix: upgraded pact matching to 0.5.0 and corrected logging #22 #21 #20 (Ronald Holshausen, Sun Jan 6 15:17:23 2019 +1100)
+* 2333cf6 - bump version to 0.2.1 (Ronald Holshausen, Mon Nov 5 15:59:22 2018 +1100)
+
 # 0.2.0 - Bugfix Release
 
 * 40f83a2 - chore: bump version to next minor (Ronald Holshausen, Mon Nov 5 15:48:16 2018 +1100)
