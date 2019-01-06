@@ -74,8 +74,10 @@ fn find_matching_request(request: &Request, auto_cors: bool, sources: &Vec<Pact>
 }
 
 fn handle_request(request: Request, auto_cors: bool, sources: Arc<Vec<Pact>>) -> Response {
-    info!("\n===> Received request: {:?}", request);
-    info!("                   body: '{}'\n", request.body.str_value());
+    info! ("===> Received {}", request);
+    debug!("     body: '{}'", request.body.str_value());
+    debug!("     matching_rules: {:?}", request.matching_rules);
+    debug!("     generators: {:?}", request.generators);
     match find_matching_request(&request, auto_cors, &sources) {
         Ok(response) => response,
         Err(msg) => {

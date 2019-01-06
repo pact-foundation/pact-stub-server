@@ -34,8 +34,10 @@ pub fn hyper_request_to_pact_request(req: Parts, body: OptionalBody) -> Request 
 }
 
 pub fn pact_response_to_hyper_response(response: &Response) -> HyperResponse<Body> {
-    info!("<=== Sending response {:?}", response);
-    info!("     body '{}'\n\n", response.body.str_value());
+    info!("<=== Sending {}", response);
+    debug!("     body: '{}'", response.body.str_value());
+    debug!("     matching_rules: {:?}", response.matching_rules);
+    debug!("     generators: {:?}", response.generators);
     let mut res = HyperResponse::builder();
     {
         res.status(response.status);

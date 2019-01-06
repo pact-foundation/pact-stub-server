@@ -34,7 +34,17 @@
       },
       "response": {
         "status": 200,
-        "body": "Response 1"
+        "body": {
+          "_id": "1234jj58-kk49-3383-vvvv-1234rrrr5678",
+          "desc": "Response 1",
+          "date": "2000-01-01"
+        },
+        "generators": {
+          "body": {
+            "$._id": {"type": "Uuid"},
+            "$.date": {"type": "Date"}
+          }
+        }
       }
     },
     {
