@@ -50,7 +50,7 @@ fn find_matching_request(request: &Request, auto_cors: bool, sources: &Vec<Pact>
         .collect::<Vec<Interaction>>();
 
     if match_results.len() > 1 {
-        warn!("Found more than one pact request for method {} and path '{}', using the first one",
+        warn!("Found more than one pact request for method {} and path '{}', using the first one with the least number of mismatches",
               request.method, request.path);
     }
 
