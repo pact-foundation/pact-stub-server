@@ -68,7 +68,6 @@ extern crate tokio;
 extern crate itertools;
 #[macro_use] extern crate log;
 #[macro_use] extern crate maplit;
-#[macro_use] #[allow(unused_imports)] extern crate p_macro;
 #[macro_use] extern crate pact_matching;
 #[cfg(test)]
 extern crate quickcheck;
