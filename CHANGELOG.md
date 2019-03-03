@@ -1,5 +1,14 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.2.2 - Disabling TLS cert validation and filtering by provider state
+
+* df12a27 - feat: add a filter by provider state #19 (Ronald Holshausen, Sun Mar 3 16:21:42 2019 +1100)
+* 7d0bc26 - feat: updated readme about flag to disable TLS cert validation #27 (Ronald Holshausen, Sun Mar 3 15:11:27 2019 +1100)
+* 849c10a - feat: added a flag to disable TLS cert validation #27 (Ronald Holshausen, Sun Mar 3 15:04:36 2019 +1100)
+* 50298e6 - fix: make warning message more explicit about what it is doing #24 (Ronald Holshausen, Sat Mar 2 12:27:18 2019 +1100)
+* 4c8285f - chore: removed pmacro as rust has a standard dbg macro now (Ronald Holshausen, Sat Mar 2 12:25:15 2019 +1100)
+* fbd8d5b - bump version to 0.2.2 (Ronald Holshausen, Sun Jan 6 15:25:08 2019 +1100)
+
 # 0.2.1 - Bugfix Release
 
 * f5870d5 - fix: upgraded pact matching to 0.5.0 and corrected logging #22 #21 #20 (Ronald Holshausen, Sun Jan 6 15:17:23 2019 +1100)
