@@ -30,13 +30,15 @@ FLAGS:
     -v, --version         Prints version information
 
 OPTIONS:
-    -d, --dir <dir>...           Directory of pact files to verify (can be repeated)
-    -f, --file <file>...         Pact file to verify (can be repeated)
-    -l, --loglevel <loglevel>    Log level (defaults to info) [possible values: error, warn, info,
-                                 debug, trace, none]
-    -p, --port <port>            Port to run on (defaults to random port assigned by the OS)
-    -u, --url <url>...           URL of pact file to verify (can be repeated)
-        --user <user>            User and password to use when fetching pacts from URLS in user:password form
+    -d, --dir <dir>...                       Directory of pact files to verify (can be repeated)
+    -f, --file <file>...                     Pact file to verify (can be repeated)
+    -l, --loglevel <loglevel>                Log level (defaults to info) [possible values: error, warn,
+                                             info, debug, trace, none]
+    -p, --port <port>                        Port to run on (defaults to random port assigned by the OS)
+    -s, --provider-state <provider-state>    Provider state regular expression to filter the responses by
+    -u, --url <url>...                       URL of pact file to verify (can be repeated)
+        --user <user>                        User and password to use when fetching pacts from URLS in user:password
+                                             form
 
 ```
 
@@ -67,6 +69,11 @@ You can specify the pacts to verify with the following options. They can be repe
 If you need to load pact files from a HTTPS URL that is using a self-signed certificate, you can use the `--insecure-tls`
 flag to disable the TLS certificate validation. WARNING: this disables all certificate validations, including expired
 certificates.
+
+### Filtering interactions by provider state
+
+You can filter the interactions by provider state by supplying the `--provider-state` option. This takes a regular
+expression that is applied to all interactions before the requests are matched.
 
 ### Server Options
 

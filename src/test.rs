@@ -1,6 +1,6 @@
 use quickcheck::{TestResult, quickcheck};
 use rand::Rng;
-use super::integer_value;
+use super::{integer_value, regex_value};
 use expectest::prelude::*;
 
 #[test]
@@ -21,4 +21,10 @@ fn validates_integer_value() {
 
     expect!(integer_value(s!("1234"))).to(be_ok());
     expect!(integer_value(s!("1234x"))).to(be_err());
+}
+
+#[test]
+fn validates_regex_value() {
+    expect!(regex_value(s!("1234"))).to(be_ok());
+    expect!(regex_value(s!("["))).to(be_err());
 }

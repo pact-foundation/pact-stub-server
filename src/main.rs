@@ -77,6 +77,7 @@ extern crate serde_json;
 extern crate simplelog;
 extern crate base64;
 extern crate native_tls;
+extern crate regex;
 
 use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
 use hyper::{Body, Request as HyperRequest};
@@ -95,6 +96,7 @@ use std::path::Path;
 use std::str::FromStr;
 use tokio::runtime::Runtime;
 use base64::encode;
+use regex::Regex;
 
 mod pact_support;
 mod server;
@@ -113,6 +115,10 @@ fn print_version() {
 
 fn integer_value(v: String) -> Result<(), String> {
     v.parse::<u16>().map(|_| ()).map_err(|e| format!("'{}' is not a valid port value: {}", v, e) )
+}
+
+fn regex_value(v: String) -> Result<(), String> {
+    Regex::new(v.as_str()).map(|_| ()).map_err(|e| format!("'{}' is not a valid regular expression: {}", v, e) )
 }
 
 /// Source for loading pacts
@@ -301,7 +307,16 @@ fn handle_command_args() -> Result<(), i32> {
           .long("insecure-tls")
           .takes_value(false)
           .use_delimiter(false)
-          .help("Disables TLS certificate validation"));
+          .help("Disables TLS certificate validation"))
+       .arg(Arg::with_name("provider-state")
+         .short("s")
+         .long("provider-state")
+         .takes_value(true)
+         .use_delimiter(false)
+         .number_of_values(1)
+         .empty_values(false)
+         .validator(regex_value)
+         .help("Provider state regular expression to filter the responses by"));
 
     let matches = app.get_matches_safe();
     match matches {
@@ -321,8 +336,11 @@ fn handle_command_args() -> Result<(), i32> {
                 Err(3)
             } else {
                 let port = matches.value_of("port").unwrap_or("0").parse::<u16>().unwrap();
+                let provider_state = matches.value_of("provider-state")
+                  .map(|filter| Regex::new(filter).unwrap());
                 server::start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect(),
-                             matches.is_present("cors"), &mut tokio_runtime)
+                                     matches.is_present("cors"),
+                                     provider_state, &mut tokio_runtime)
             }
         },
         Err(ref err) => {
