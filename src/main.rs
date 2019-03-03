@@ -76,11 +76,14 @@ extern crate rand;
 extern crate serde_json;
 extern crate simplelog;
 extern crate base64;
+extern crate native_tls;
 
 use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
 use hyper::{Body, Request as HyperRequest};
 use hyper::Client;
+use hyper::client::connect::HttpConnector;
 use hyper_tls::HttpsConnector;
+use native_tls::TlsConnector;
 use hyper::rt::{Future, Stream};
 use log::LogLevelFilter;
 use pact_matching::models::{Pact, PactSpecification};
@@ -156,10 +159,20 @@ fn walkdir(dir: &Path) -> io::Result<Vec<io::Result<Pact>>> {
     Ok(pacts)
 }
 
-fn pact_from_url(url: String, user: &Option<String>, runtime: &mut Runtime) -> Result<Pact, String> {
+fn pact_from_url(url: String, user: &Option<String>, runtime: &mut Runtime, insecure_tls: bool) -> Result<Pact, String> {
     match url.parse::<hyper::Uri>() {
         Ok(uri) => {
-            let https = HttpsConnector::new(4).unwrap();
+            warn!("Disabling TLS certificate validation");
+            let https = if insecure_tls {
+                let mut http = HttpConnector::new(4);
+                http.enforce_http(false);
+                HttpsConnector::from((http, TlsConnector::builder()
+                  .danger_accept_invalid_hostnames(true)
+                  .danger_accept_invalid_certs(true)
+                  .build().unwrap()))
+            } else {
+                HttpsConnector::new(4).unwrap()
+            };
             let mut req = HyperRequest::builder();
             req.uri(uri).method("GET");
             match user {
@@ -193,7 +206,7 @@ fn pact_from_url(url: String, user: &Option<String>, runtime: &mut Runtime) -> R
     }
 }
 
-fn load_pacts(sources: Vec<PactSource>, runtime: &mut Runtime) -> Vec<Result<Pact, String>> {
+fn load_pacts(sources: Vec<PactSource>, runtime: &mut Runtime, insecure_tls: bool) -> Vec<Result<Pact, String>> {
     sources.iter().flat_map(|s| {
         match s {
             &PactSource::File(ref file) => vec![Pact::read_pact(Path::new(&file))
@@ -207,8 +220,10 @@ fn load_pacts(sources: Vec<PactSource>, runtime: &mut Runtime) -> Vec<Result<Pac
                     }).collect(),
                 Err(err) => vec![Err(format!("Could not load pacts from directory '{}' - {}", dir, err))]
             },
-            &PactSource::URL(ref url, ref user) => vec![pact_from_url(url.clone(), user, runtime)
-                .map_err(|err| format!("Failed to load pact '{}' - {}", url, err))]
+            &PactSource::URL(ref url, ref user) => vec![
+                pact_from_url(url.clone(), user, runtime, insecure_tls)
+                .map_err(|err| format!("Failed to load pact '{}' - {}", url, err))
+            ]
         }
     })
     .collect()
@@ -281,7 +296,12 @@ fn handle_command_args() -> Result<(), i32> {
           .long("cors")
           .takes_value(false)
           .use_delimiter(false)
-          .help("Automatically respond to OPTIONS requests and return default CORS headers"));
+          .help("Automatically respond to OPTIONS requests and return default CORS headers"))
+        .arg(Arg::with_name("insecure-tls")
+          .long("insecure-tls")
+          .takes_value(false)
+          .use_delimiter(false)
+          .help("Disables TLS certificate validation"));
 
     let matches = app.get_matches_safe();
     match matches {
@@ -291,7 +311,7 @@ fn handle_command_args() -> Result<(), i32> {
             let sources = pact_source(matches);
 
             let mut tokio_runtime = Runtime::new().unwrap();
-            let pacts = load_pacts(sources, &mut tokio_runtime);
+            let pacts = load_pacts(sources, &mut tokio_runtime, matches.is_present("insecure-tls"));
             if pacts.iter().any(|p| p.is_err()) {
                 error!("There were errors loading the pact files.");
                 for error in pacts.iter().filter(|p| p.is_err()).cloned().map(|e| e.unwrap_err()) {
