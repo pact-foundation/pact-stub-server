@@ -19,28 +19,30 @@ use regex::Regex;
 
 #[derive(Clone)]
 pub struct ServerHandler {
-  sources: Arc<Vec<Pact>>,
-  auto_cors: bool,
-  provider_state: Option<Regex>
+    sources: Arc<Vec<Pact>>,
+    auto_cors: bool,
+    provider_state: Option<Regex>,
+    provider_state_header_name: String
 }
 
 fn method_supports_payload(request: &Request) -> bool {
-  match request.method.to_uppercase().as_str() {
-    "POST" | "PUT" | "PATCH" => true,
-    _ => false
-  }
+    match request.method.to_uppercase().as_str() {
+        "POST" | "PUT" | "PATCH" => true,
+        _ => false
+    }
 }
 
 fn find_matching_request(request: &Request, auto_cors: bool, sources: &Vec<Pact>, provider_state: Option<Regex>) -> Result<Response, String> {
     match provider_state.clone() {
-      Some(state) => info!("Filtering interactions by provider state regex '{}'", state),
-      None => ()
+        Some(state) => info!("Filtering interactions by provider state regex '{}'", state),
+        None => ()
     }
     let match_results = sources
         .iter()
         .flat_map(|pact| pact.interactions.clone())
         .filter(|i| match provider_state {
-            Some(ref regex) => i.provider_states.iter().any(|state| regex.is_match(state.name.as_str())),
+            Some(ref regex) => i.provider_states.iter().any(|state| regex.is_match(state.name
+                .as_str())),
             None => true
         })
         .map(|i| (i.clone(), pact_matching::match_request(i.request, request.clone())))
@@ -105,11 +107,13 @@ fn handle_request(request: Request, auto_cors: bool, sources: Arc<Vec<Pact>>, pr
 }
 
 impl ServerHandler {
-    pub fn new(sources: Vec<Pact>, auto_cors: bool, provider_state: Option<Regex>) -> ServerHandler {
+    pub fn new(sources: Vec<Pact>, auto_cors: bool, provider_state: Option<Regex>,
+               provider_state_header_name: String) ->  ServerHandler {
         ServerHandler {
-          sources: Arc::new(sources),
-          auto_cors,
-          provider_state
+            sources: Arc::new(sources),
+            auto_cors,
+            provider_state,
+            provider_state_header_name
         }
     }
 }
@@ -120,11 +124,20 @@ impl Service for ServerHandler {
     type Error = HyperError;
     type Future = ServerHandlerFuture;
 
+    // TODO make the parameter name configurable so there are no collisions with the actual server to be stubbed.
     fn call(&mut self, req: HyperRequest<Body>) -> <Self as Service>::Future {
         let auto_cors = self.auto_cors;
         let sources = self.sources.clone();
-        let provider_state = self.provider_state.clone();
+        let mut provider_state = self.provider_state.clone();
         let (parts, body) = req.into_parts();
+        {
+            let yeah = &parts;
+            let provider_state_header = yeah.headers.get(self.provider_state_header_name.clone());
+            if provider_state_header.is_some() {
+                provider_state = Some(Regex::new(provider_state_header.unwrap().to_str().unwrap()).unwrap());
+            }
+        }
+
         let future = body.concat2()
             .then(|body| future::ok(match body {
                 Ok(chunk) => if chunk.is_empty() {
@@ -171,12 +184,13 @@ impl NewService for ServerHandler {
     }
 }
 
-pub fn start_server(port: u16, sources: Vec<Pact>, auto_cors: bool, provider_state: Option<Regex>, runtime: &mut Runtime) -> Result<(), i32> {
+pub fn start_server(port: u16, sources: Vec<Pact>, auto_cors: bool, provider_state:
+Option<Regex>, provider_state_header_name: String, runtime: &mut Runtime) -> Result<(), i32> {
     let addr = ([0, 0, 0, 0], port).into();
     match Server::try_bind(&addr) {
         Ok(builder) => {
             let server = builder.http1_keepalive(false)
-                .serve(ServerHandler::new(sources, auto_cors, provider_state));
+                .serve(ServerHandler::new(sources, auto_cors, provider_state, provider_state_header_name));
             info!("Server started on port {}", server.local_addr().port());
             runtime.block_on(server.map_err(|err| error!("could not start server: {}", err)))
                 .map_err(|_| {
@@ -345,19 +359,19 @@ mod test {
         };
         let interaction1 = Interaction {
             request: Request {
-            path: s!("/api/objects"),
-            query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
-            .. Request::default_request()
+                path: s!("/api/objects"),
+                query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
+                .. Request::default_request()
             },
             .. Interaction::default()
         };
 
         let interaction2 = Interaction {
             request: Request {
-            path: s!("/api/objects"),
-            query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
-            matching_rules,
-            .. Request::default_request()
+                path: s!("/api/objects"),
+                query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
+                matching_rules,
+                .. Request::default_request()
             },
             .. Interaction::default()
         };
@@ -398,7 +412,8 @@ mod test {
             response: Response { status: 203, .. Response::default_response() },
             .. Interaction::default() };
 
-        let pact = Pact { interactions: vec![ interaction1, interaction2, interaction3 ], .. Pact::default() };
+        let pact = Pact { interactions: vec![ interaction1, interaction2, interaction3 ],
+            .. Pact::default() };
 
         let request = Request::default_request();
 
@@ -408,5 +423,4 @@ mod test {
         expect!(super::find_matching_request(&request, false, &vec![pact.clone()], Some(Regex::new("state four").unwrap()))).to(be_err());
         expect!(super::find_matching_request(&request, false, &vec![pact.clone()], Some(Regex::new("state .*").unwrap()))).to(be_ok().value(response1.clone()));
     }
-
 }

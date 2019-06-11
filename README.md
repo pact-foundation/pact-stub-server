@@ -36,6 +36,8 @@ OPTIONS:
                                              info, debug, trace, none]
     -p, --port <port>                        Port to run on (defaults to random port assigned by the OS)
     -s, --provider-state <provider-state>    Provider state regular expression to filter the responses by
+        --provider-state-header-name <name>  Name of the header parameter containing the provider state to be used in case 
+                                             multiple matching interactions are found
     -u, --url <url>...                       URL of pact file to verify (can be repeated)
         --user <user>                        User and password to use when fetching pacts from URLS in user:password
                                              form

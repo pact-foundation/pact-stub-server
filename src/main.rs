@@ -26,6 +26,9 @@
 //!     -f, --file <file>            Pact file to verify (can be repeated)
 //!     -l, --loglevel <loglevel>    Log level (defaults to info) [values: error, warn, info, debug, trace, none]
 //!     -p, --port <port>            Port to run on (defaults to random port assigned by the OS)
+//!     -s, --provider-state <provider-state>    Provider state regular expression to filter the responses by
+//!         --provider-state-header-name <name>  Name of the header parameter containing the
+//! provider state to be used in case multiple matching interactions are found
 //!     -u, --url <url>              URL of pact file to verify (can be repeated)
 //!
 //! ```
@@ -173,9 +176,9 @@ fn pact_from_url(url: String, user: &Option<String>, runtime: &mut Runtime, inse
                 let mut http = HttpConnector::new(4);
                 http.enforce_http(false);
                 HttpsConnector::from((http, TlsConnector::builder()
-                  .danger_accept_invalid_hostnames(true)
-                  .danger_accept_invalid_certs(true)
-                  .build().unwrap()))
+                    .danger_accept_invalid_hostnames(true)
+                    .danger_accept_invalid_certs(true)
+                    .build().unwrap()))
             } else {
                 HttpsConnector::new(4).unwrap()
             };
@@ -219,20 +222,20 @@ fn load_pacts(sources: Vec<PactSource>, runtime: &mut Runtime, insecure_tls: boo
                 .map_err(|err| format!("Failed to load pact '{}' - {}", file, err))],
             &PactSource::Dir(ref dir) => match walkdir(Path::new(dir)) {
                 Ok(ref pacts) => pacts.iter().map(|p| {
-                        match p {
-                            &Ok(ref pact) => Ok(pact.clone()),
-                            &Err(ref err) => Err(format!("Failed to load pact from '{}' - {}", dir, err))
-                        }
-                    }).collect(),
+                    match p {
+                        &Ok(ref pact) => Ok(pact.clone()),
+                        &Err(ref err) => Err(format!("Failed to load pact from '{}' - {}", dir, err))
+                    }
+                }).collect(),
                 Err(err) => vec![Err(format!("Could not load pacts from directory '{}' - {}", dir, err))]
             },
             &PactSource::URL(ref url, ref user) => vec![
                 pact_from_url(url.clone(), user, runtime, insecure_tls)
-                .map_err(|err| format!("Failed to load pact '{}' - {}", url, err))
+                    .map_err(|err| format!("Failed to load pact '{}' - {}", url, err))
             ]
         }
     })
-    .collect()
+        .collect()
 }
 
 fn handle_command_args() -> Result<(), i32> {
@@ -298,25 +301,33 @@ fn handle_command_args() -> Result<(), i32> {
             .help("Port to run on (defaults to random port assigned by the OS)")
             .validator(integer_value))
         .arg(Arg::with_name("cors")
-          .short("o")
-          .long("cors")
-          .takes_value(false)
-          .use_delimiter(false)
-          .help("Automatically respond to OPTIONS requests and return default CORS headers"))
+            .short("o")
+            .long("cors")
+            .takes_value(false)
+            .use_delimiter(false)
+            .help("Automatically respond to OPTIONS requests and return default CORS headers"))
         .arg(Arg::with_name("insecure-tls")
-          .long("insecure-tls")
-          .takes_value(false)
-          .use_delimiter(false)
-          .help("Disables TLS certificate validation"))
-       .arg(Arg::with_name("provider-state")
-         .short("s")
-         .long("provider-state")
-         .takes_value(true)
-         .use_delimiter(false)
-         .number_of_values(1)
-         .empty_values(false)
-         .validator(regex_value)
-         .help("Provider state regular expression to filter the responses by"));
+            .long("insecure-tls")
+            .takes_value(false)
+            .use_delimiter(false)
+            .help("Disables TLS certificate validation"))
+        .arg(Arg::with_name("provider-state")
+            .short("s")
+            .long("provider-state")
+            .takes_value(true)
+            .use_delimiter(false)
+            .number_of_values(1)
+            .empty_values(false)
+            .validator(regex_value)
+            .help("Provider state regular expression to filter the responses by"))
+        .arg(Arg::with_name("provider-state-header-name")
+            .long("provider-state-header-name")
+            .takes_value(true)
+            .use_delimiter(false)
+            .number_of_values(1)
+            .empty_values(false)
+            .help("Name of the header parameter containing the provider state to be used in case \
+            multiple matching interactions are found"));
 
     let matches = app.get_matches_safe();
     match matches {
@@ -337,10 +348,13 @@ fn handle_command_args() -> Result<(), i32> {
             } else {
                 let port = matches.value_of("port").unwrap_or("0").parse::<u16>().unwrap();
                 let provider_state = matches.value_of("provider-state")
-                  .map(|filter| Regex::new(filter).unwrap());
+                    .map(|filter| Regex::new(filter).unwrap());
+                let provider_state_header_name: String = matches.value_of
+                ("provider-state-header-name")
+                    .unwrap().into();
                 server::start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect(),
                                      matches.is_present("cors"),
-                                     provider_state, &mut tokio_runtime)
+                                     provider_state, provider_state_header_name, &mut tokio_runtime)
             }
         },
         Err(ref err) => {
@@ -361,14 +375,14 @@ fn handle_command_args() -> Result<(), i32> {
 }
 
 fn setup_logger(level: &str) {
-  let log_level = match level {
-    "none" => LogLevelFilter::Off,
-    _ => LogLevelFilter::from_str(level).unwrap()
-  };
-  match TermLogger::init(log_level, Config::default()) {
-    Err(_) => SimpleLogger::init(log_level, Config::default()).unwrap_or(()),
-    Ok(_) => ()
-  }
+    let log_level = match level {
+        "none" => LogLevelFilter::Off,
+        _ => LogLevelFilter::from_str(level).unwrap()
+    };
+    match TermLogger::init(log_level, Config::default()) {
+        Err(_) => SimpleLogger::init(log_level, Config::default()).unwrap_or(()),
+        Ok(_) => ()
+    }
 }
 
 #[cfg(test)]
