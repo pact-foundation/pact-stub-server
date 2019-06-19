@@ -349,9 +349,8 @@ fn handle_command_args() -> Result<(), i32> {
                 let port = matches.value_of("port").unwrap_or("0").parse::<u16>().unwrap();
                 let provider_state = matches.value_of("provider-state")
                     .map(|filter| Regex::new(filter).unwrap());
-                let provider_state_header_name: String = matches.value_of
-                ("provider-state-header-name")
-                    .unwrap().into();
+                let provider_state_header_name = matches.value_of("provider-state-header-name")
+                    .map(|filter| String::from(filter));
                 server::start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect(),
                                      matches.is_present("cors"),
                                      provider_state, provider_state_header_name, &mut tokio_runtime)

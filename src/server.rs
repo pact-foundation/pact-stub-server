@@ -22,7 +22,7 @@ pub struct ServerHandler {
     sources: Arc<Vec<Pact>>,
     auto_cors: bool,
     provider_state: Option<Regex>,
-    provider_state_header_name: String
+    provider_state_header_name: Option<String>
 }
 
 fn method_supports_payload(request: &Request) -> bool {
@@ -108,7 +108,7 @@ fn handle_request(request: Request, auto_cors: bool, sources: Arc<Vec<Pact>>, pr
 
 impl ServerHandler {
     pub fn new(sources: Vec<Pact>, auto_cors: bool, provider_state: Option<Regex>,
-               provider_state_header_name: String) ->  ServerHandler {
+               provider_state_header_name: Option<String>) ->  ServerHandler {
         ServerHandler {
             sources: Arc::new(sources),
             auto_cors,
@@ -131,10 +131,11 @@ impl Service for ServerHandler {
         let mut provider_state = self.provider_state.clone();
         let (parts, body) = req.into_parts();
         {
-            let yeah = &parts;
-            let provider_state_header = yeah.headers.get(self.provider_state_header_name.clone());
-            if provider_state_header.is_some() {
-                provider_state = Some(Regex::new(provider_state_header.unwrap().to_str().unwrap()).unwrap());
+            let parts_value = &parts;
+            let provider_state_header = parts_value.headers.get(self.provider_state_header_name
+                .clone().unwrap());
+            if let Some(header) = provider_state_header {
+                provider_state = Some(Regex::new(header.to_str().unwrap()).unwrap());
             }
         }
 
@@ -185,7 +186,8 @@ impl NewService for ServerHandler {
 }
 
 pub fn start_server(port: u16, sources: Vec<Pact>, auto_cors: bool, provider_state:
-Option<Regex>, provider_state_header_name: String, runtime: &mut Runtime) -> Result<(), i32> {
+Option<Regex>, provider_state_header_name: Option<String>, runtime: &mut Runtime) -> Result<(),
+    i32> {
     let addr = ([0, 0, 0, 0], port).into();
     match Server::try_bind(&addr) {
         Ok(builder) => {
