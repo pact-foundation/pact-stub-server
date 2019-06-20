@@ -1,5 +1,10 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.3.0 - Provider state as request header parameter
+
+* 0daedac - Added support for parsing the provider state from request header using a custom name. (Zakaria Boutami, Tue Jun 11 16:00:34 
+2019 +0200)
+
 # 0.2.2 - Disabling TLS cert validation and filtering by provider state
 
 * df12a27 - feat: add a filter by provider state #19 (Ronald Holshausen, Sun Mar 3 16:21:42 2019 +1100)
