@@ -1,0 +1,127 @@
+{
+  "provider": {
+      "name": "service"
+  },
+  "consumer": {
+      "name": "abc-service"
+  },
+  "interactions": [
+      {
+          "description": "Registers an application",
+          "request": {
+              "method": "POST",
+              "path": "/api/authentication/applications",
+              "headers": {
+                  "X-App-Registration-Key": "Ld61vMw2jKLBNClekKCkSSshETpX0pUl4S0YpJwPvWBpO4sB",
+                  "Content-Type": "application/json"
+              },
+              "body": {
+                  "description": "string",
+                  "applicationName": "fservice"
+              },
+              "matchingRules": {
+                  "body": {
+                      "$.description": {
+                          "matchers": [
+                              {
+                                  "match": "type"
+                              }
+                          ],
+                          "combine": "AND"
+                      }
+                  }
+              },
+              "generators": {
+                  "body": {
+                      "$.description": {
+                          "type": "RandomString",
+                          "size": 20
+                      }
+                  }
+              }
+          },
+          "response": {
+              "status": 200,
+              "headers": {
+                  "Content-Type": "application/json; charset=UTF-8"
+              },
+              "body": {
+                  "clientId": "string",
+                  "description": "abc",
+                  "clientSecret": "string",
+                  "id": 1234567890,
+                  "applicationName": "fservice"
+              },
+              "matchingRules": {
+                  "body": {
+                      "$.id": {
+                          "matchers": [
+                              {
+                                  "match": "type"
+                              }
+                          ],
+                          "combine": "AND"
+                      },
+                      "$.clientId": {
+                          "matchers": [
+                              {
+                                  "match": "type"
+                              }
+                          ],
+                          "combine": "AND"
+                      },
+                      "$.clientSecret": {
+                          "matchers": [
+                              {
+                                  "match": "type"
+                              }
+                          ],
+                          "combine": "AND"
+                      }
+                  },
+                  "header": {
+                      "Content-Type": {
+                          "matchers": [
+                              {
+                                  "match": "regex",
+                                  "regex": "application/json;\\s?charset=(utf|UTF)-8"
+                              }
+                          ],
+                          "combine": "AND"
+                      }
+                  }
+              },
+              "generators": {
+                  "body": {
+                      "$.id": {
+                          "type": "RandomInt",
+                          "min": 0,
+                          "max": 2147483647
+                      },
+                      "$.clientId": {
+                          "type": "RandomString",
+                          "size": 20
+                      },
+                      "$.clientSecret": {
+                          "type": "RandomString",
+                          "size": 20
+                      }
+                  }
+              }
+          },
+          "providerStates": [
+              {
+                  "name": "There is a request to register an application"
+              }
+          ]
+      }
+  ],
+  "metadata": {
+      "pactSpecification": {
+          "version": "3.0.0"
+      },
+      "pact-jvm": {
+          "version": "3.5.21"
+      }
+  }
+}
