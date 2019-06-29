@@ -1,5 +1,15 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.3.0 - Bugfix Release
+
+* 0e73a10 - chore: upgrade crates (Ronald Holshausen, Sat Jun 29 19:51:17 2019 +1000)
+* e741007 - fix: upgrade to latest pact matching library (Ronald Holshausen, Sat Jun 29 19:43:12 2019 +1000)
+* 990587b - fix: panic if provider_state_header_name is not given (Ronald Holshausen, Sat Jun 29 17:44:31 2019 +1000)
+* 3c0e848 - Added changes requested by @uglyog in #28. (Zakaria Boutami, Wed Jun 19 15:04:51 2019 +0200)
+* 31e4b5f - update changelog for release 0.3.0 (Zakaria Boutami, Tue Jun 11 16:48:31 2019 +0200)
+* 0daedac - Added support for parsing the provider state from request header using a custom name. (Zakaria Boutami, Tue Jun 11 16:00:26 2019 +0200)
+* 828aaa7 - bump version to 0.2.3 (Ronald Holshausen, Sun Mar 3 16:45:05 2019 +1100)
+
 # 0.3.0 - Provider state as request header parameter
 
 * 0daedac - Added support for parsing the provider state from request header using a custom name. (Zakaria Boutami, Tue Jun 11 16:00:34 
