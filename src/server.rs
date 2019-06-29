@@ -130,7 +130,7 @@ impl Service for ServerHandler {
         let sources = self.sources.clone();
         let mut provider_state = self.provider_state.clone();
         let (parts, body) = req.into_parts();
-        {
+        if self.provider_state_header_name.is_some() {
             let parts_value = &parts;
             let provider_state_header = parts_value.headers.get(self.provider_state_header_name
                 .clone().unwrap());
