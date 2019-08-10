@@ -72,7 +72,7 @@ fn find_matching_request(request: &Request, auto_cors: bool, sources: &Vec<Pact>
             if auto_cors && request.method.to_uppercase() == "OPTIONS" {
                 Ok(Response {
                     headers: Some(hashmap!{
-                    s!("Access-Control-Allow-Headers") => s!("authorization,Content-Type"),
+                    s!("Access-Control-Allow-Headers") => s!("*"),
                     s!("Access-Control-Allow-Methods") => s!("GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH"),
                     s!("Access-Control-Allow-Origin") => s!("*")
                   }),
