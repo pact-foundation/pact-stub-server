@@ -6,6 +6,8 @@
 This project provides a server that can generate responses based on pact files. It is a single executable binary. 
 It implements the [V3 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-3).
 
+[Docker Image](https://hub.docker.com/r/pactfoundation/pact-stub-server)
+
 [Online rust docs](https://docs.rs/crate/pact-stub-server/0.2.2)
 
 The stub server works by taking all the interactions (requests and responses) from a number of pact files. 
@@ -17,7 +19,7 @@ For each interaction, it will compare any incoming request against those defined
 The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this with out any options displays the standard help.
 
 ```console
-pact-stub-server v0.2.2
+pact-stub-server v0.3.1
 Pact Stub Server
 
 USAGE:
@@ -30,18 +32,24 @@ FLAGS:
     -v, --version         Prints version information
 
 OPTIONS:
-    -d, --dir <dir>...                       Directory of pact files to verify (can be repeated)
-    -f, --file <file>...                     Pact file to verify (can be repeated)
-    -l, --loglevel <loglevel>                Log level (defaults to info) [possible values: error, warn,
-                                             info, debug, trace, none]
-    -p, --port <port>                        Port to run on (defaults to random port assigned by the OS)
-    -s, --provider-state <provider-state>    Provider state regular expression to filter the responses by
-        --provider-state-header-name <name>  Name of the header parameter containing the provider state to be used in case 
-                                             multiple matching interactions are found
-    -u, --url <url>...                       URL of pact file to verify (can be repeated)
-        --user <user>                        User and password to use when fetching pacts from URLS in user:password
-                                             form
+    -d, --dir <dir>...                                               Directory of pact files to verify (can be repeated)
+    -f, --file <file>...                                             Pact file to verify (can be repeated)
+    -l, --loglevel <loglevel>
+            Log level (defaults to info) [possible values: error, warn, info, debug,
+            trace, none]
+    -p, --port <port>
+            Port to run on (defaults to random port assigned by the OS)
 
+    -s, --provider-state <provider-state>
+            Provider state regular expression to filter the responses by
+
+        --provider-state-header-name <provider-state-header-name>
+            Name of the header parameter containing the provider state to be used in case multiple matching interactions
+            are found
+    -t, --token <token>                                              Bearer token to use when fetching pacts from URLS
+    -u, --url <url>...                                               URL of pact file to verify (can be repeated)
+        --user <user>
+            User and password to use when fetching pacts from URLS in user:password form
 ```
 
 ## Options
@@ -64,7 +72,8 @@ You can specify the pacts to verify with the following options. They can be repe
 | `-u, --url <url>` | URL | Loads a pact from a URL resource |
 | `-d, --dir <dir>` | Directory | Loads all the pacts from the given directory |
 
-*Note:* For URLs that are authenticated, you can use the `--user` option to set the username and password.
+*Note:* For URLs that are authenticated, you can use the `--user` option to set the username and password or the
+`--token` to use a bearer token.
 
 #### Disabling TLS certificate validation
 
