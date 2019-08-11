@@ -72,9 +72,9 @@ fn find_matching_request(request: &Request, auto_cors: bool, sources: &Vec<Pact>
             if auto_cors && request.method.to_uppercase() == "OPTIONS" {
                 Ok(Response {
                     headers: Some(hashmap!{
-                    s!("Access-Control-Allow-Headers") => s!("*"),
-                    s!("Access-Control-Allow-Methods") => s!("GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH"),
-                    s!("Access-Control-Allow-Origin") => s!("*")
+                    s!("Access-Control-Allow-Headers") => vec![s!("*")],
+                    s!("Access-Control-Allow-Methods") => vec![s!("GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH")],
+                    s!("Access-Control-Allow-Origin") => vec![s!("*")]
                   }),
                     .. Response::default_response()
                 })
@@ -99,7 +99,7 @@ fn handle_request(request: Request, auto_cors: bool, sources: Arc<Vec<Pact>>, pr
                 .. Response::default_response()
             };
             if auto_cors {
-                response.headers = Some(hashmap!{ s!("Access-Control-Allow-Origin") => s!("*") })
+                response.headers = Some(hashmap!{ s!("Access-Control-Allow-Origin") => vec![s!("*")] })
             }
             response
         }
@@ -306,7 +306,7 @@ mod test {
             .. Request::default_request() };
         let request3 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 16}".as_bytes().into()),
             .. Request::default_request() };
-        let request4 = Request { method: s!("PUT"), headers: Some(hashmap!{ s!("Content-Type") => s!("application/json") }),
+        let request4 = Request { method: s!("PUT"), headers: Some(hashmap!{ s!("Content-Type") => vec![s!("application/json")] }),
             .. Request::default_request() };
 
         expect!(super::find_matching_request(&request1, false, &vec![pact1.clone(), pact2.clone()], None)).to(be_ok());
@@ -424,5 +424,19 @@ mod test {
         expect!(super::find_matching_request(&request, false, &vec![pact.clone()], Some(Regex::new("state three").unwrap()))).to(be_ok().value(response3.clone()));
         expect!(super::find_matching_request(&request, false, &vec![pact.clone()], Some(Regex::new("state four").unwrap()))).to(be_err());
         expect!(super::find_matching_request(&request, false, &vec![pact.clone()], Some(Regex::new("state .*").unwrap()))).to(be_ok().value(response1.clone()));
+    }
+
+    #[test]
+    fn handles_repeated_headers_values() {
+        let interaction = Interaction {
+            request: Request { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Z")] }),  .. Request::default_request() },
+            response: Response { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Y")] }), .. Response::default_response() },
+            .. Interaction::default() };
+        let pact = Pact { interactions: vec![ interaction.clone() ], .. Pact::default() };
+
+        let request = Request { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Y")] }), .. Request::default_request() };
+
+        let result = super::find_matching_request(&request, false, &vec![pact], None);
+        expect!(result).to(be_ok().value(interaction.response));
     }
 }

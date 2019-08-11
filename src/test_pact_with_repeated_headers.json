@@ -1,0 +1,40 @@
+{
+  "provider": {
+    "name": "test_provider"
+  },
+  "consumer": {
+    "name": "test_consumer"
+  },
+  "interactions": [
+    {
+      "providerState": "test state",
+      "description": "test interaction",
+      "request": {
+        "method": "GET",
+        "path": "/",
+        "headers": {
+          "TEST-X": "X, Y"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "_id": "1234jj58-kk49-3383-vvvv-1234rrrr5678",
+          "desc": "Response 1",
+          "date": "2000-01-01"
+        },
+        "headers": {
+          "Set-Cookie": "JSESSIONID=alphabeta120394049; HttpOnly, AWSELBID=baaadbeef6767676767690220; Path=/alpha"
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "pact-specification": {
+      "version": "2.0.0"
+    },
+    "pact-jvm": {
+      "version": ""
+    }
+  }
+}

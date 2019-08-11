@@ -14,12 +14,29 @@ fn extract_query_string(uri: &Uri) -> Option<HashMap<String, Vec<String>>> {
     }
 }
 
-fn extract_headers(headers: &HeaderMap<HeaderValue>) -> Option<HashMap<String, String>> {
-    if headers.len() > 0 {
-        Some(headers.iter().map(|(h, v)| (h.as_str().into(), v.to_str().unwrap_or("").to_string())).collect())
-    } else {
-        None
-    }
+fn extract_headers(headers: &HeaderMap<HeaderValue>) -> Option<HashMap<String, Vec<String>>> {
+  if !headers.is_empty() {
+    let result: HashMap<String, Vec<String>> = headers.keys()
+      .map(|name| {
+        let values = headers.get_all(name);
+        let parsed_vals: Vec<Result<String, ()>> = values.iter()
+          .map(|val| val.to_str()
+            .map(|v| v.to_string())
+            .map_err(|err| {
+              warn!("Failed to parse HTTP header value: {}", err);
+              ()
+            })
+          ).collect();
+        ((name.as_str().into(), parsed_vals.iter().cloned()
+          .filter(|val| val.is_ok())
+          .map(|val| val.unwrap_or_default())
+          .collect()))
+      })
+      .collect();
+    Some(result)
+  } else {
+    None
+  }
 }
 
 pub fn hyper_request_to_pact_request(req: Parts, body: OptionalBody) -> Request {
@@ -43,12 +60,14 @@ pub fn pact_response_to_hyper_response(response: &Response) -> HyperResponse<Bod
         res.status(response.status);
 
         match response.headers {
-            Some(ref headers) => {
-                for (k, v) in headers.clone() {
-                    res.header(k.as_str(), v);
-                }
-            },
-            None => ()
+          Some(ref headers) => {
+            for (k, v) in headers.clone() {
+              for val in v {
+                res.header(k.as_str(), val);
+              }
+            }
+          },
+          None => ()
         }
 
         if !response.has_header(&ACCESS_CONTROL_ALLOW_ORIGIN.as_str().into()) {
@@ -93,7 +112,7 @@ mod test {
     fn test_response_with_content_type() {
         let response = Response {
             status: 201,
-            headers: Some(hashmap! { s!("Content-Type") => s!("text/dizzy") }),
+            headers: Some(hashmap! { s!("Content-Type") => vec![s!("text/dizzy")] }),
             body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
             .. Response::default_response()
         };
@@ -119,7 +138,7 @@ mod test {
     #[test]
     fn only_add_a_cors_origin_header_if_one_has_not_already_been_provided() {
         let response = Response {
-            headers: Some(hashmap! { s!("Access-Control-Allow-Origin") => s!("dodgy.com") }),
+            headers: Some(hashmap! { s!("Access-Control-Allow-Origin") => vec![s!("dodgy.com")] }),
             .. Response::default_response()
         };
         let hyper_response = pact_response_to_hyper_response(&response);
