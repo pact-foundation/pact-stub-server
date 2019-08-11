@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.3.1 - bearer tokens and headers with multiple values
+
+* a93f256 - feat: add support for bearer tokens (Ronald Holshausen, Sun Aug 11 11:07:19 2019 +1000)
+* be2a3f4 - fix: support headers with multiple values #31 (Ronald Holshausen, Sun Aug 11 10:26:21 2019 +1000)
+* 71e52b6 - Setting wildcard value * for Access-Control-Allow-Headers (Dario Banfi, Sun Jul 28 17:02:52 2019 +0200)
+* 934b748 - bump version to 0.3.1 (Ronald Holshausen, Sat Jun 29 20:07:48 2019 +1000)
+
 # 0.3.0 - Bugfix Release
 
 * 0e73a10 - chore: upgrade crates (Ronald Holshausen, Sat Jun 29 19:51:17 2019 +1000)
