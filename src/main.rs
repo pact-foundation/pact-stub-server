@@ -124,6 +124,15 @@ fn regex_value(v: String) -> Result<(), String> {
     Regex::new(v.as_str()).map(|_| ()).map_err(|e| format!("'{}' is not a valid regular expression: {}", v, e) )
 }
 
+/// Type of authentication to use
+#[derive(Debug, Clone)]
+pub enum UrlAuth {
+  /// Username and Password
+  User(String),
+  /// Bearer token
+  Token(String)
+}
+
 /// Source for loading pacts
 #[derive(Debug, Clone)]
 pub enum PactSource {
@@ -132,7 +141,7 @@ pub enum PactSource {
     /// Load all the pacts from a Directory
     Dir(String),
     /// Load the pact from a URL
-    URL(String, Option<String>)
+    URL(String, Option<UrlAuth>)
 }
 
 fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
@@ -147,7 +156,9 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
     };
     match matches.values_of("url") {
         Some(values) => sources.extend(values.map(|v| {
-            PactSource::URL(s!(v), matches.value_of("user").map(|u| u.to_string()))
+          let auth = matches.value_of("user").map(|u| UrlAuth::User(u.to_string()))
+            .or(matches.value_of("token").map(|v| UrlAuth::Token(v.to_string())));
+          PactSource::URL(s!(v), auth)
         }).collect::<Vec<PactSource>>()),
         None => ()
     };
@@ -168,11 +179,11 @@ fn walkdir(dir: &Path) -> io::Result<Vec<io::Result<Pact>>> {
     Ok(pacts)
 }
 
-fn pact_from_url(url: String, user: &Option<String>, runtime: &mut Runtime, insecure_tls: bool) -> Result<Pact, String> {
+fn pact_from_url(url: String, auth: &Option<UrlAuth>, runtime: &mut Runtime, insecure_tls: bool) -> Result<Pact, String> {
     match url.parse::<hyper::Uri>() {
         Ok(uri) => {
-            warn!("Disabling TLS certificate validation");
             let https = if insecure_tls {
+              warn!("Disabling TLS certificate validation");
                 let mut http = HttpConnector::new(4);
                 http.enforce_http(false);
                 HttpsConnector::from((http, TlsConnector::builder()
@@ -184,8 +195,11 @@ fn pact_from_url(url: String, user: &Option<String>, runtime: &mut Runtime, inse
             };
             let mut req = HyperRequest::builder();
             req.uri(uri).method("GET");
-            match user {
-                Some(ref u) => { req.header("Authorization", format!("Basic {}", encode(u))); },
+            match auth {
+                Some(ref u) => { match u {
+                  &UrlAuth::User(ref user) => req.header("Authorization", format!("Basic {}", encode(&user))),
+                  &UrlAuth::Token(ref token) => req.header("Authorization", format!("Bearer {}", token))
+                }; ()},
                 None => ()
             }
             debug!("Executing Request to fetch pact from URL: {:?}", req);
@@ -229,8 +243,8 @@ fn load_pacts(sources: Vec<PactSource>, runtime: &mut Runtime, insecure_tls: boo
                 }).collect(),
                 Err(err) => vec![Err(format!("Could not load pacts from directory '{}' - {}", dir, err))]
             },
-            &PactSource::URL(ref url, ref user) => vec![
-                pact_from_url(url.clone(), user, runtime, insecure_tls)
+            &PactSource::URL(ref url, ref auth) => vec![
+                pact_from_url(url.clone(), auth, runtime, insecure_tls)
                     .map_err(|err| format!("Failed to load pact '{}' - {}", url, err))
             ]
         }
@@ -287,12 +301,22 @@ fn handle_command_args() -> Result<(), i32> {
             .empty_values(false)
             .help("URL of pact file to verify (can be repeated)"))
         .arg(Arg::with_name("user")
-            .long("user")
-            .takes_value(true)
-            .use_delimiter(false)
-            .number_of_values(1)
-            .empty_values(false)
-            .help("User and password to use when fetching pacts from URLS in user:password form"))
+          .long("user")
+          .takes_value(true)
+          .use_delimiter(false)
+          .number_of_values(1)
+          .empty_values(false)
+          .conflicts_with("token")
+          .help("User and password to use when fetching pacts from URLS in user:password form"))
+        .arg(Arg::with_name("token")
+          .short("t")
+          .long("token")
+          .takes_value(true)
+          .use_delimiter(false)
+          .number_of_values(1)
+          .empty_values(false)
+          .conflicts_with("user")
+          .help("Bearer token to use when fetching pacts from URLS"))
         .arg(Arg::with_name("port")
             .short("p")
             .long("port")
