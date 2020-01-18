@@ -19,7 +19,7 @@ For each interaction, it will compare any incoming request against those defined
 The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this with out any options displays the standard help.
 
 ```console
-pact-stub-server v0.3.1
+pact-stub-server v0.3.2
 Pact Stub Server
 
 USAGE:
@@ -27,6 +27,7 @@ USAGE:
 
 FLAGS:
     -o, --cors            Automatically respond to OPTIONS requests and return default CORS headers
+        --cors-referer    Set the CORS Access-Control-Allow-Origin header to the Referer
     -h, --help            Prints help information
         --insecure-tls    Disables TLS certificate validation
     -v, --version         Prints version information
@@ -60,7 +61,9 @@ You can control the log level with the `-l, --loglevel <loglevel>` option. It de
 
 ### CORS pre-flight requests
 
-If you specify the `-o, --cors` option, then any un-matched OPTION request will result in a default 200 response.
+If you specify the `-o, --cors` option, then any un-matched OPTION request will result in a default 200 response. By default the 
+Access-Control-Allow-Origin header will be set to `*`. If you provide the `--cors-referer` flag, then it will be set to the
+value of the Referer header from the request.
 
 ### Pact File Sources
 
