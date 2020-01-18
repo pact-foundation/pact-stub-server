@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.3.2 - CORS referer option
+
+* d69aa92 - feat: update readme with new cors flag #32 (Ronald Holshausen, Sat Jan 18 12:34:28 2020 +1100)
+* e1865fb - feat: add option to set cors origin to the referer header #32 (Ronald Holshausen, Sat Jan 18 12:24:04 2020 +1100)
+* 92f0a32 - chore: update readme (Ronald Holshausen, Sun Aug 11 11:28:46 2019 +1000)
+* fa41bd5 - bump version to 0.3.2 (Ronald Holshausen, Sun Aug 11 11:20:25 2019 +1000)
+
 # 0.3.1 - bearer tokens and headers with multiple values
 
 * a93f256 - feat: add support for bearer tokens (Ronald Holshausen, Sun Aug 11 11:07:19 2019 +1000)
