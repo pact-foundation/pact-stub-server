@@ -46,7 +46,7 @@ pub fn hyper_request_to_pact_request(req: Parts, body: OptionalBody) -> Request 
         query: extract_query_string(&req.uri),
         headers: extract_headers(&req.headers),
         body,
-        .. Request::default_request()
+        .. Request::default()
     }
 }
 
@@ -99,7 +99,7 @@ mod test {
         let response = Response {
             status: 201,
             headers: Some(hashmap! {  }),
-            .. Response::default_response()
+            .. Response::default()
         };
         let hyper_response = pact_response_to_hyper_response(&response);
 
@@ -114,7 +114,7 @@ mod test {
             status: 201,
             headers: Some(hashmap! { s!("Content-Type") => vec![s!("text/dizzy")] }),
             body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
-            .. Response::default_response()
+            .. Response::default()
         };
         let hyper_response = pact_response_to_hyper_response(&response);
 
@@ -127,7 +127,7 @@ mod test {
     fn adds_a_content_type_if_there_is_not_one_and_there_is_a_body() {
         let response = Response {
             body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
-            .. Response::default_response()
+            .. Response::default()
         };
         let hyper_response = pact_response_to_hyper_response(&response);
 
@@ -139,7 +139,7 @@ mod test {
     fn only_add_a_cors_origin_header_if_one_has_not_already_been_provided() {
         let response = Response {
             headers: Some(hashmap! { s!("Access-Control-Allow-Origin") => vec![s!("dodgy.com")] }),
-            .. Response::default_response()
+            .. Response::default()
         };
         let hyper_response = pact_response_to_hyper_response(&response);
 

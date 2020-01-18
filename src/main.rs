@@ -330,6 +330,12 @@ fn handle_command_args() -> Result<(), i32> {
             .takes_value(false)
             .use_delimiter(false)
             .help("Automatically respond to OPTIONS requests and return default CORS headers"))
+        .arg(Arg::with_name("cors-referer")
+            .long("cors-referer")
+            .takes_value(false)
+            .use_delimiter(false)
+            .requires("cors")
+            .help("Set the CORS Access-Control-Allow-Origin header to the Referer"))
         .arg(Arg::with_name("insecure-tls")
             .long("insecure-tls")
             .takes_value(false)
@@ -376,7 +382,7 @@ fn handle_command_args() -> Result<(), i32> {
                 let provider_state_header_name = matches.value_of("provider-state-header-name")
                     .map(|filter| String::from(filter));
                 server::start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect(),
-                                     matches.is_present("cors"),
+                                     matches.is_present("cors"), matches.is_present("cors-referer"),
                                      provider_state, provider_state_header_name, &mut tokio_runtime)
             }
         },
