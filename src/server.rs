@@ -8,7 +8,7 @@ use itertools::Itertools;
 use pact_matching::{self, Mismatch};
 use pact_matching::models::{Interaction, Pact, Request, Response};
 use pact_matching::models::OptionalBody;
-use pact_support;
+use crate::pact_support;
 use std::sync::Arc;
 use tokio::prelude::Async;
 use tokio::prelude::future;
@@ -57,9 +57,7 @@ fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool,
             }
         }))
         .sorted_by(|a, b| Ord::cmp(&a.1.len(), &b.1.len()))
-        .iter()
-        .map(|&(ref i, _)| i)
-        .cloned()
+        .map(|(i, _)| i.clone())
         .collect::<Vec<Interaction>>();
 
     if match_results.len() > 1 {

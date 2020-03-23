@@ -61,26 +61,9 @@
 #![warn(missing_docs)]
 
 #[macro_use] extern crate clap;
-#[cfg(test)]
-#[macro_use(expect)]
-extern crate expectest;
-extern crate http;
-extern crate hyper;
-extern crate hyper_tls;
-extern crate tokio;
-extern crate itertools;
 #[macro_use] extern crate log;
 #[macro_use] extern crate maplit;
 #[macro_use] extern crate pact_matching;
-#[cfg(test)]
-extern crate quickcheck;
-#[cfg(test)]
-extern crate rand;
-extern crate serde_json;
-extern crate simplelog;
-extern crate base64;
-extern crate native_tls;
-extern crate regex;
 
 use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
 use hyper::{Body, Request as HyperRequest};
@@ -89,9 +72,9 @@ use hyper::client::connect::HttpConnector;
 use hyper_tls::HttpsConnector;
 use native_tls::TlsConnector;
 use hyper::rt::{Future, Stream};
-use log::LogLevelFilter;
+use log::LevelFilter;
 use pact_matching::models::{Pact, PactSpecification};
-use simplelog::{Config, SimpleLogger, TermLogger};
+use simplelog::{Config, SimpleLogger, TermLogger, TerminalMode};
 use std::env;
 use std::fs;
 use std::io;
@@ -405,10 +388,10 @@ fn handle_command_args() -> Result<(), i32> {
 
 fn setup_logger(level: &str) {
     let log_level = match level {
-        "none" => LogLevelFilter::Off,
-        _ => LogLevelFilter::from_str(level).unwrap()
+        "none" => LevelFilter::Off,
+        _ => LevelFilter::from_str(level).unwrap()
     };
-    match TermLogger::init(log_level, Config::default()) {
+    match TermLogger::init(log_level, Config::default(), TerminalMode::Mixed) {
         Err(_) => SimpleLogger::init(log_level, Config::default()).unwrap_or(()),
         Ok(_) => ()
     }
