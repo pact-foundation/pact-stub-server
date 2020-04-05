@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.4.0 - Upgrade hyper to 0.13 and Rust async/await
+
+* 07e2d9c - chore: Upgrade hyper to 0.13 and Rust async/await (Ronald Holshausen, Sun Apr 5 16:12:34 2020 +1000)
+* 2edd291 - chore: upgrade all crates and Rust to 2018 edition (Ronald Holshausen, Mon Mar 23 16:38:05 2020 +1100)
+* 772fb19 - fix: GCC is not available for i686 targets on Appveyor (Ronald Holshausen, Sat Jan 18 12:55:37 2020 +1100)
+* f234e2e - bump version to 0.3.3 (Ronald Holshausen, Sat Jan 18 12:48:23 2020 +1100)
+
 # 0.3.2 - CORS referer option
 
 * d69aa92 - feat: update readme with new cors flag #32 (Ronald Holshausen, Sat Jan 18 12:34:28 2020 +1100)
