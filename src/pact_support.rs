@@ -1,4 +1,4 @@
-use http::{HeaderMap, Uri};
+use http::{HeaderMap, Uri, Error};
 use http::header::{ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE};
 use http::header::HeaderValue;
 use http::request::Parts;
@@ -50,40 +50,34 @@ pub fn hyper_request_to_pact_request(req: Parts, body: OptionalBody) -> Request 
     }
 }
 
-pub fn pact_response_to_hyper_response(response: &Response) -> HyperResponse<Body> {
-    info!("<=== Sending {}", response);
-    debug!("     body: '{}'", response.body.str_value());
-    debug!("     matching_rules: {:?}", response.matching_rules);
-    debug!("     generators: {:?}", response.generators);
-    let mut res = HyperResponse::builder();
-    {
-        res.status(response.status);
+pub fn pact_response_to_hyper_response(response: &Response) -> Result<HyperResponse<Body>, Error> {
+  info!("<=== Sending {}", response);
+  debug!("     body: '{}'", response.body.str_value());
+  debug!("     matching_rules: {:?}", response.matching_rules);
+  debug!("     generators: {:?}", response.generators);
+  let mut res = HyperResponse::builder().status(response.status);
 
-        match response.headers {
-          Some(ref headers) => {
-            for (k, v) in headers.clone() {
-              for val in v {
-                res.header(k.as_str(), val);
-              }
-            }
-          },
-          None => ()
-        }
-
-        if !response.has_header(&ACCESS_CONTROL_ALLOW_ORIGIN.as_str().into()) {
-            res.header(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-        }
-
-        match response.body {
-            OptionalBody::Present(ref body) => {
-                if !response.has_header(&CONTENT_TYPE.as_str().into()) {
-                    res.header(CONTENT_TYPE, response.content_type());
-                }
-                res.body(Body::from(body.clone()))
-            },
-            _ => res.body(Body::empty())
-        }.unwrap()
+  if let Some(headers) = &response.headers {
+    for (k, v) in headers.clone() {
+      for val in v {
+        res = res.header(k.as_str(), val);
+      }
     }
+  }
+
+  if !response.has_header(&ACCESS_CONTROL_ALLOW_ORIGIN.as_str().into()) {
+    res = res.header(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+  }
+
+  match response.body {
+    OptionalBody::Present(ref body) => {
+      if !response.has_header(&CONTENT_TYPE.as_str().into()) {
+        res = res.header(CONTENT_TYPE, response.content_type());
+      }
+      res.body(Body::from(body.clone()))
+    },
+    _ => res.body(Body::empty())
+  }
 }
 
 #[cfg(test)]
@@ -101,7 +95,7 @@ mod test {
             headers: Some(hashmap! {  }),
             .. Response::default()
         };
-        let hyper_response = pact_response_to_hyper_response(&response);
+        let hyper_response = pact_response_to_hyper_response(&response).unwrap();
 
         expect!(hyper_response.status()).to(be_equal_to(StatusCode::CREATED));
         expect!(hyper_response.headers().len()).to(be_equal_to(1));
@@ -116,7 +110,7 @@ mod test {
             body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
             .. Response::default()
         };
-        let hyper_response = pact_response_to_hyper_response(&response);
+        let hyper_response = pact_response_to_hyper_response(&response).unwrap();
 
         expect!(hyper_response.status()).to(be_equal_to(StatusCode::CREATED));
         expect!(hyper_response.headers().is_empty()).to(be_false());
@@ -129,7 +123,7 @@ mod test {
             body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
             .. Response::default()
         };
-        let hyper_response = pact_response_to_hyper_response(&response);
+        let hyper_response = pact_response_to_hyper_response(&response).unwrap();
 
         expect!(hyper_response.headers().is_empty()).to(be_false());
         expect!(hyper_response.headers().get("content-type")).to(be_some().value(HeaderValue::from_static("application/json")));
@@ -141,7 +135,7 @@ mod test {
             headers: Some(hashmap! { s!("Access-Control-Allow-Origin") => vec![s!("dodgy.com")] }),
             .. Response::default()
         };
-        let hyper_response = pact_response_to_hyper_response(&response);
+        let hyper_response = pact_response_to_hyper_response(&response).unwrap();
 
         expect!(hyper_response.headers().len()).to(be_equal_to(1));
         expect!(hyper_response.headers().get("Access-Control-Allow-Origin")).to(be_some().value(HeaderValue::from_static("dodgy.com")));

@@ -1,25 +1,21 @@
-use http::StatusCode;
-use hyper::{Body, Error as HyperError, Request as HyperRequest, Response as HyperResponse, Server};
-use hyper::rt::Future;
-use hyper::rt::Stream;
-use hyper::service::NewService;
-use hyper::service::Service;
+use http::{StatusCode, Error};
 use itertools::Itertools;
 use pact_matching::{self, Mismatch};
 use pact_matching::models::{Interaction, Pact, Request, Response};
 use pact_matching::models::OptionalBody;
 use crate::pact_support;
-use std::sync::Arc;
-use tokio::prelude::Async;
-use tokio::prelude::future;
-use tokio::prelude::future::FutureResult;
-use tokio::prelude::IntoFuture;
-use tokio::runtime::Runtime;
+use hyper::{Body, Request as HyperRequest, Response as HyperResponse, Server};
 use regex::Regex;
+use std::pin::Pin;
+use tower_service::Service;
+use futures::task::{Context, Poll};
+use hyper::server::conn::AddrStream;
+use std::future::Future;
+use futures::executor::block_on;
 
 #[derive(Clone)]
 pub struct ServerHandler {
-    sources: Arc<Vec<Pact>>,
+    sources: Vec<Pact>,
     auto_cors: bool,
     cors_referer: bool,
     provider_state: Option<Regex>,
@@ -92,7 +88,7 @@ fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool,
     }
 }
 
-fn handle_request(request: Request, auto_cors: bool, cors_referrer: bool, sources: Arc<Vec<Pact>>, provider_state: Option<Regex>) -> Response {
+fn handle_request(request: Request, auto_cors: bool, cors_referrer: bool, sources: Vec<Pact>, provider_state: Option<Regex>) -> Response {
     info! ("===> Received {}", request);
     debug!("     body: '{}'", request.body.str_value());
     debug!("     matching_rules: {:?}", request.matching_rules);
@@ -114,106 +110,90 @@ fn handle_request(request: Request, auto_cors: bool, cors_referrer: bool, source
 }
 
 impl ServerHandler {
-    pub fn new(sources: Vec<Pact>, auto_cors: bool, cors_referer: bool, provider_state: Option<Regex>,
-               provider_state_header_name: Option<String>) ->  ServerHandler {
-        ServerHandler {
-            sources: Arc::new(sources),
-            auto_cors,
-            cors_referer,
-            provider_state,
-            provider_state_header_name
-        }
+  pub fn new(sources: Vec<Pact>, auto_cors: bool, cors_referer: bool, provider_state: Option<Regex>,
+             provider_state_header_name: Option<String>) ->  ServerHandler {
+    ServerHandler {
+      sources,
+      auto_cors,
+      cors_referer,
+      provider_state,
+      provider_state_header_name
     }
-}
+  }
 
-impl Service for ServerHandler {
-    type ReqBody = Body;
-    type ResBody = Body;
-    type Error = HyperError;
-    type Future = ServerHandlerFuture;
-
-    // TODO make the parameter name configurable so there are no collisions with the actual server to be stubbed.
-    fn call(&mut self, req: HyperRequest<Body>) -> <Self as Service>::Future {
-        let auto_cors = self.auto_cors;
-        let cors_referrer = self.cors_referer;
-        let sources = self.sources.clone();
-        let mut provider_state = self.provider_state.clone();
-        let (parts, body) = req.into_parts();
-        if self.provider_state_header_name.is_some() {
-            let parts_value = &parts;
-            let provider_state_header = parts_value.headers.get(self.provider_state_header_name
-                .clone().unwrap());
-            if let Some(header) = provider_state_header {
-                provider_state = Some(Regex::new(header.to_str().unwrap()).unwrap());
-            }
-        }
-
-        let future = body.concat2()
-            .then(|body| future::ok(match body {
-                Ok(chunk) => if chunk.is_empty() {
-                    OptionalBody::Empty
-                } else {
-                    OptionalBody::Present(chunk.iter().cloned().collect())
-                },
-                Err(err) => {
-                    warn!("Failed to read request body: {}", err);
-                    OptionalBody::Empty
-                }
-            }))
-            .map(move |body| pact_support::hyper_request_to_pact_request(parts, body))
-            .map(move |req| handle_request(req, auto_cors, cors_referrer, sources, provider_state))
-            .map(|res| pact_support::pact_response_to_hyper_response(&res))
-            .into_future();
-        ServerHandlerFuture { future: Box::new(future) }
-    }
-}
-
-pub struct ServerHandlerFuture {
-    future: Box<dyn Future<Item=HyperResponse<Body>, Error=HyperError> + Send>
-}
-
-impl Future for ServerHandlerFuture {
-    type Item = HyperResponse<Body>;
-    type Error = HyperError;
-
-    fn poll(&mut self) -> Result<Async<<Self as Future>::Item>, <Self as Future>::Error> {
-        self.future.poll()
-    }
-}
-
-impl NewService for ServerHandler {
-    type ReqBody = Body;
-    type ResBody = Body;
-    type Error = HyperError;
-    type Service = ServerHandler;
-    type Future = FutureResult<ServerHandler, HyperError>;
-    type InitError = HyperError;
-
-    fn new_service(&self) -> <Self as NewService>::Future {
-        future::ok(self.clone())
-    }
-}
-
-pub fn start_server(port: u16, sources: Vec<Pact>, auto_cors: bool, cors_referer: bool, provider_state:
-Option<Regex>, provider_state_header_name: Option<String>, runtime: &mut Runtime) -> Result<(),
-    i32> {
+  pub fn start_server(self, port: u16) -> Result<(), i32> {
     let addr = ([0, 0, 0, 0], port).into();
     match Server::try_bind(&addr) {
-        Ok(builder) => {
-            let server = builder.http1_keepalive(false)
-                .serve(ServerHandler::new(sources, auto_cors, cors_referer, provider_state, provider_state_header_name));
-            info!("Server started on port {}", server.local_addr().port());
-            runtime.block_on(server.map_err(|err| error!("could not start server: {}", err)))
-                .map_err(|_| {
-                    format!("error occurred scheduling server future on Tokio runtime");
-                    2
-                })
+      Ok(builder) => {
+        let server = builder.http1_keepalive(false)
+          .serve(hyper::service::make_service_fn(|_: &AddrStream| {
+            let inner = self.clone();
+            async {
+              Ok::<_, hyper::Error>(inner)
+            }
+          }));
+        info!("Server started on port {}", server.local_addr().port());
+        block_on(server).map_err(|err| {
+          error!("error occurred scheduling server future on Tokio runtime: {}", err);
+          2
+        })?;
+        Ok(())
+      },
+      Err(err) => {
+        error!("could not start server: {}", err);
+        Err(1)
+      }
+    }
+  }
+}
+
+impl Service<HyperRequest<Body>> for ServerHandler {
+  type Response = HyperResponse<Body>;
+  type Error = Error;
+  type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+  fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    Poll::Ready(Ok(()))
+  }
+
+  fn call(&mut self, req: HyperRequest<Body>) -> Self::Future {
+    let auto_cors = self.auto_cors.clone();
+    let cors_referrer = self.cors_referer;
+    let sources = self.sources.clone();
+    let provider_state = self.provider_state.clone();
+    let provider_state_header_name = self.provider_state_header_name.clone();
+
+    Box::pin(async move {
+      let (parts, body) = req.into_parts();
+      let provider_state = match provider_state_header_name {
+        Some(name) => {
+          let parts_value = &parts;
+          let provider_state_header = parts_value.headers.get(name);
+          match provider_state_header {
+            Some(header) => Some(Regex::new(header.to_str().unwrap()).unwrap()),
+            None => provider_state
+          }
+        },
+        None => provider_state
+      };
+
+      let bytes = hyper::body::to_bytes(body).await;
+      let body = match bytes {
+        Ok(contents) => if contents.is_empty() {
+          OptionalBody::Empty
+        } else {
+          OptionalBody::Present(contents.to_vec())
         },
         Err(err) => {
-            error!("could not start server: {}", err);
-            Err(1)
+          warn!("Failed to read request body: {}", err);
+          OptionalBody::Empty
         }
-    }
+      };
+      let request = pact_support::hyper_request_to_pact_request(parts, body);
+      let response = handle_request(request, auto_cors, cors_referrer, sources, provider_state);
+      pact_support::pact_response_to_hyper_response(&response)
+    })
+  }
 }
 
 #[cfg(test)]

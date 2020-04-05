@@ -66,32 +66,65 @@
 #[macro_use] extern crate pact_matching;
 
 use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
-use hyper::{Body, Request as HyperRequest};
-use hyper::Client;
-use hyper::client::connect::HttpConnector;
-use hyper_tls::HttpsConnector;
-use native_tls::TlsConnector;
-use hyper::rt::{Future, Stream};
 use log::LevelFilter;
 use pact_matching::models::{Pact, PactSpecification};
 use simplelog::{Config, SimpleLogger, TermLogger, TerminalMode};
 use std::env;
 use std::fs;
-use std::io;
 use std::path::Path;
 use std::str::FromStr;
-use tokio::runtime::Runtime;
 use base64::encode;
 use regex::Regex;
+use std::error::Error;
+use std::fmt::Display;
+use serde::export::Formatter;
+use futures::stream::*;
+use crate::server::ServerHandler;
 
 mod pact_support;
 mod server;
 
-fn main() {
-    match handle_command_args() {
-        Ok(_) => (),
-        Err(err) => std::process::exit(err)
-    }
+#[derive(Debug, Clone)]
+struct PactError {
+  message: String
+}
+
+impl PactError {
+  fn new(str: String) -> PactError {
+    PactError { message: str }
+  }
+}
+
+impl Display for PactError {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.message)
+  }
+}
+
+impl From<reqwest::Error> for PactError {
+  fn from(err: reqwest::Error) -> Self {
+    PactError { message: format!("Request failed: {}", err) }
+  }
+}
+
+impl From<serde_json::error::Error> for PactError {
+  fn from(err: serde_json::error::Error) -> Self {
+    PactError { message: format!("Failed to parse JSON body: {}", err) }
+  }
+}
+
+impl From<std::io::Error> for PactError {
+  fn from(err: std::io::Error) -> Self {
+    PactError { message: format!("Failed to load pact file: {}", err) }
+  }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
+  match handle_command_args().await {
+    Ok(_) => Ok(()),
+    Err(err) => std::process::exit(err)
+  }
 }
 
 fn print_version() {
@@ -148,7 +181,7 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
     sources
 }
 
-fn walkdir(dir: &Path) -> io::Result<Vec<io::Result<Pact>>> {
+fn walkdir(dir: &Path) -> Result<Vec<Result<Pact, PactError>>, PactError> {
     let mut pacts = vec![];
     debug!("Scanning {:?}", dir);
     for entry in fs::read_dir(dir)? {
@@ -156,234 +189,200 @@ fn walkdir(dir: &Path) -> io::Result<Vec<io::Result<Pact>>> {
         if path.is_dir() {
             walkdir(&path)?;
         } else {
-            pacts.push(Pact::read_pact(&path))
+            pacts.push(Pact::read_pact(&path).map_err(|err| PactError::from(err)))
         }
     }
     Ok(pacts)
 }
 
-fn pact_from_url(url: String, auth: &Option<UrlAuth>, runtime: &mut Runtime, insecure_tls: bool) -> Result<Pact, String> {
-    match url.parse::<hyper::Uri>() {
-        Ok(uri) => {
-            let https = if insecure_tls {
-              warn!("Disabling TLS certificate validation");
-                let mut http = HttpConnector::new(4);
-                http.enforce_http(false);
-                HttpsConnector::from((http, TlsConnector::builder()
-                    .danger_accept_invalid_hostnames(true)
-                    .danger_accept_invalid_certs(true)
-                    .build().unwrap()))
-            } else {
-                HttpsConnector::new(4).unwrap()
-            };
-            let mut req = HyperRequest::builder();
-            req.uri(uri).method("GET");
-            match auth {
-                Some(ref u) => { match u {
-                  &UrlAuth::User(ref user) => req.header("Authorization", format!("Basic {}", encode(&user))),
-                  &UrlAuth::Token(ref token) => req.header("Authorization", format!("Bearer {}", token))
-                }; ()},
-                None => ()
-            }
-            debug!("Executing Request to fetch pact from URL: {:?}", req);
-            let client = Client::builder()
-                .build::<_, hyper::Body>(https);
-            let future = client
-                .request(req.body(Body::empty()).unwrap())
-                .map_err(|err| format!("Request failed - {}", err))
-                .and_then(|res| {
-                    if res.status().is_success() {
-                        Ok(res)
-                    } else {
-                        Err(format!("Request failed - {}", res.status()))
-                    }
-                })
-                .and_then(|res| res.into_body().concat2().map_err(|err| format!("Failed to read the request body - {}", err)))
-                .and_then(move |body| {
-                    let pact_json = serde_json::from_slice(&body)
-                        .map_err(|err| format!("Failed to parse Pact JSON - {}", err))?;
-                    let pact = Pact::from_json(&url, &pact_json);
-                    debug!("Fetched Pact: {:?}", pact);
-                    Ok(pact)
-                });
-            runtime.block_on(future)
-        },
-        Err(err) => Err(format!("Request failed - {}", err))
-    }
+async fn pact_from_url(url: &String, auth: &Option<UrlAuth>, insecure_tls: bool) -> Result<Pact, PactError> {
+  let client = if insecure_tls {
+    warn!("Disabling TLS certificate validation");
+    reqwest::Client::builder()
+      .danger_accept_invalid_hostnames(true)
+      .danger_accept_invalid_certs(true)
+      .build()?
+  } else {
+    reqwest::Client::builder().build()?
+  };
+  let mut req = client.get(url);
+  if let Some(ref u) = auth {
+    req = match u {
+      &UrlAuth::User(ref user) => req.header("Authorization", format!("Basic {}", encode(&user))),
+      &UrlAuth::Token(ref token) => req.header("Authorization", format!("Bearer {}", token))
+    };
+  }
+  debug!("Executing Request to fetch pact from URL: {}", url);
+  let res = req.send().await?.text().await?;
+  let pact_json = serde_json::from_str(&res)?;
+  let pact = Pact::from_json(&url, &pact_json);
+  debug!("Fetched Pact: {:?}", pact);
+  Ok(pact)
 }
 
-fn load_pacts(sources: Vec<PactSource>, runtime: &mut Runtime, insecure_tls: bool) -> Vec<Result<Pact, String>> {
-    sources.iter().flat_map(|s| {
-        match s {
-            &PactSource::File(ref file) => vec![Pact::read_pact(Path::new(&file))
-                .map_err(|err| format!("Failed to load pact '{}' - {}", file, err))],
-            &PactSource::Dir(ref dir) => match walkdir(Path::new(dir)) {
-                Ok(ref pacts) => pacts.iter().map(|p| {
-                    match p {
-                        &Ok(ref pact) => Ok(pact.clone()),
-                        &Err(ref err) => Err(format!("Failed to load pact from '{}' - {}", dir, err))
-                    }
-                }).collect(),
-                Err(err) => vec![Err(format!("Could not load pacts from directory '{}' - {}", dir, err))]
-            },
-            &PactSource::URL(ref url, ref auth) => vec![
-                pact_from_url(url.clone(), auth, runtime, insecure_tls)
-                    .map_err(|err| format!("Failed to load pact '{}' - {}", url, err))
-            ]
-        }
-    })
-        .collect()
+async fn load_pacts(sources: Vec<PactSource>, insecure_tls: bool) -> Vec<Result<Pact, PactError>> {
+  futures::stream::iter(sources.iter().cloned()).then(| s| async move {
+    let val = match s {
+      PactSource::File(ref file) => vec![Pact::read_pact(Path::new(file)).map_err(|err| PactError::from(err))],
+      PactSource::Dir(ref dir) => match walkdir(Path::new(dir)) {
+        Ok(ref pacts) => pacts.iter().cloned().map(|res| res.map_err(|err| PactError::from(err))).collect(),
+        Err(err) => vec![Err(PactError::new(format!("Could not load pacts from directory '{}' - {}", dir, err)))]
+      },
+      PactSource::URL(ref url, ref auth) => vec![pact_from_url(url, auth, insecure_tls).await]
+    };
+    futures::stream::iter(val.clone())
+  }).flatten().collect().await
 }
 
-fn handle_command_args() -> Result<(), i32> {
-    let args: Vec<String> = env::args().collect();
-    let program = args[0].clone();
+async fn handle_command_args() -> Result<(), i32> {
+  let args: Vec<String> = env::args().collect();
+  let program = args[0].clone();
 
-    let version = format!("v{}", crate_version!());
-    let app = App::new(program)
-        .version(version.as_str())
-        .about("Pact Stub Server")
-        .version_short("v")
-        .setting(AppSettings::ArgRequiredElseHelp)
-        .setting(AppSettings::ColoredHelp)
-        .arg(Arg::with_name("loglevel")
-            .short("l")
-            .long("loglevel")
-            .takes_value(true)
-            .use_delimiter(false)
-            .possible_values(&["error", "warn", "info", "debug", "trace", "none"])
-            .help("Log level (defaults to info)"))
-        .arg(Arg::with_name("file")
-            .short("f")
-            .long("file")
-            .required_unless_one(&["dir", "url"])
-            .takes_value(true)
-            .use_delimiter(false)
-            .multiple(true)
-            .number_of_values(1)
-            .empty_values(false)
-            .help("Pact file to verify (can be repeated)"))
-        .arg(Arg::with_name("dir")
-            .short("d")
-            .long("dir")
-            .required_unless_one(&["file", "url"])
-            .takes_value(true)
-            .use_delimiter(false)
-            .multiple(true)
-            .number_of_values(1)
-            .empty_values(false)
-            .help("Directory of pact files to verify (can be repeated)"))
-        .arg(Arg::with_name("url")
-            .short("u")
-            .long("url")
-            .required_unless_one(&["file", "dir"])
-            .takes_value(true)
-            .use_delimiter(false)
-            .multiple(true)
-            .number_of_values(1)
-            .empty_values(false)
-            .help("URL of pact file to verify (can be repeated)"))
-        .arg(Arg::with_name("user")
-          .long("user")
+  let version = format!("v{}", crate_version!());
+  let app = App::new(program)
+      .version(version.as_str())
+      .about("Pact Stub Server")
+      .version_short("v")
+      .setting(AppSettings::ArgRequiredElseHelp)
+      .setting(AppSettings::ColoredHelp)
+      .arg(Arg::with_name("loglevel")
+          .short("l")
+          .long("loglevel")
+          .takes_value(true)
+          .use_delimiter(false)
+          .possible_values(&["error", "warn", "info", "debug", "trace", "none"])
+          .help("Log level (defaults to info)"))
+      .arg(Arg::with_name("file")
+          .short("f")
+          .long("file")
+          .required_unless_one(&["dir", "url"])
+          .takes_value(true)
+          .use_delimiter(false)
+          .multiple(true)
+          .number_of_values(1)
+          .empty_values(false)
+          .help("Pact file to verify (can be repeated)"))
+      .arg(Arg::with_name("dir")
+          .short("d")
+          .long("dir")
+          .required_unless_one(&["file", "url"])
+          .takes_value(true)
+          .use_delimiter(false)
+          .multiple(true)
+          .number_of_values(1)
+          .empty_values(false)
+          .help("Directory of pact files to verify (can be repeated)"))
+      .arg(Arg::with_name("url")
+          .short("u")
+          .long("url")
+          .required_unless_one(&["file", "dir"])
+          .takes_value(true)
+          .use_delimiter(false)
+          .multiple(true)
+          .number_of_values(1)
+          .empty_values(false)
+          .help("URL of pact file to verify (can be repeated)"))
+      .arg(Arg::with_name("user")
+        .long("user")
+        .takes_value(true)
+        .use_delimiter(false)
+        .number_of_values(1)
+        .empty_values(false)
+        .conflicts_with("token")
+        .help("User and password to use when fetching pacts from URLS in user:password form"))
+      .arg(Arg::with_name("token")
+        .short("t")
+        .long("token")
+        .takes_value(true)
+        .use_delimiter(false)
+        .number_of_values(1)
+        .empty_values(false)
+        .conflicts_with("user")
+        .help("Bearer token to use when fetching pacts from URLS"))
+      .arg(Arg::with_name("port")
+          .short("p")
+          .long("port")
+          .takes_value(true)
+          .use_delimiter(false)
+          .help("Port to run on (defaults to random port assigned by the OS)")
+          .validator(integer_value))
+      .arg(Arg::with_name("cors")
+          .short("o")
+          .long("cors")
+          .takes_value(false)
+          .use_delimiter(false)
+          .help("Automatically respond to OPTIONS requests and return default CORS headers"))
+      .arg(Arg::with_name("cors-referer")
+          .long("cors-referer")
+          .takes_value(false)
+          .use_delimiter(false)
+          .requires("cors")
+          .help("Set the CORS Access-Control-Allow-Origin header to the Referer"))
+      .arg(Arg::with_name("insecure-tls")
+          .long("insecure-tls")
+          .takes_value(false)
+          .use_delimiter(false)
+          .help("Disables TLS certificate validation"))
+      .arg(Arg::with_name("provider-state")
+          .short("s")
+          .long("provider-state")
           .takes_value(true)
           .use_delimiter(false)
           .number_of_values(1)
           .empty_values(false)
-          .conflicts_with("token")
-          .help("User and password to use when fetching pacts from URLS in user:password form"))
-        .arg(Arg::with_name("token")
-          .short("t")
-          .long("token")
+          .validator(regex_value)
+          .help("Provider state regular expression to filter the responses by"))
+      .arg(Arg::with_name("provider-state-header-name")
+          .long("provider-state-header-name")
           .takes_value(true)
           .use_delimiter(false)
           .number_of_values(1)
           .empty_values(false)
-          .conflicts_with("user")
-          .help("Bearer token to use when fetching pacts from URLS"))
-        .arg(Arg::with_name("port")
-            .short("p")
-            .long("port")
-            .takes_value(true)
-            .use_delimiter(false)
-            .help("Port to run on (defaults to random port assigned by the OS)")
-            .validator(integer_value))
-        .arg(Arg::with_name("cors")
-            .short("o")
-            .long("cors")
-            .takes_value(false)
-            .use_delimiter(false)
-            .help("Automatically respond to OPTIONS requests and return default CORS headers"))
-        .arg(Arg::with_name("cors-referer")
-            .long("cors-referer")
-            .takes_value(false)
-            .use_delimiter(false)
-            .requires("cors")
-            .help("Set the CORS Access-Control-Allow-Origin header to the Referer"))
-        .arg(Arg::with_name("insecure-tls")
-            .long("insecure-tls")
-            .takes_value(false)
-            .use_delimiter(false)
-            .help("Disables TLS certificate validation"))
-        .arg(Arg::with_name("provider-state")
-            .short("s")
-            .long("provider-state")
-            .takes_value(true)
-            .use_delimiter(false)
-            .number_of_values(1)
-            .empty_values(false)
-            .validator(regex_value)
-            .help("Provider state regular expression to filter the responses by"))
-        .arg(Arg::with_name("provider-state-header-name")
-            .long("provider-state-header-name")
-            .takes_value(true)
-            .use_delimiter(false)
-            .number_of_values(1)
-            .empty_values(false)
-            .help("Name of the header parameter containing the provider state to be used in case \
-            multiple matching interactions are found"));
+          .help("Name of the header parameter containing the provider state to be used in case \
+          multiple matching interactions are found"));
 
-    let matches = app.get_matches_safe();
-    match matches {
-        Ok(ref matches) => {
-            let level = matches.value_of("loglevel").unwrap_or("info");
-            setup_logger(level);
-            let sources = pact_source(matches);
+  let matches = app.get_matches_safe();
+  match matches {
+    Ok(ref matches) => {
+      let level = matches.value_of("loglevel").unwrap_or("info");
+      setup_logger(level);
+      let sources = pact_source(matches);
 
-            let mut tokio_runtime = Runtime::new().unwrap();
-            let pacts = load_pacts(sources, &mut tokio_runtime, matches.is_present("insecure-tls"));
-            if pacts.iter().any(|p| p.is_err()) {
-                error!("There were errors loading the pact files.");
-                for error in pacts.iter().filter(|p| p.is_err()).cloned().map(|e| e.unwrap_err()) {
-                    error!("  - {}", error);
-                }
-                tokio_runtime.shutdown_now();
-                Err(3)
-            } else {
-                let port = matches.value_of("port").unwrap_or("0").parse::<u16>().unwrap();
-                let provider_state = matches.value_of("provider-state")
-                    .map(|filter| Regex::new(filter).unwrap());
-                let provider_state_header_name = matches.value_of("provider-state-header-name")
-                    .map(|filter| String::from(filter));
-                server::start_server(port, pacts.iter().cloned().map(|p| p.unwrap()).collect(),
-                                     matches.is_present("cors"), matches.is_present("cors-referer"),
-                                     provider_state, provider_state_header_name, &mut tokio_runtime)
-            }
-        },
-        Err(ref err) => {
-            match err.kind {
-                ErrorKind::HelpDisplayed => {
-                    println!("{}", err.message);
-                    Ok(())
-                },
-                ErrorKind::VersionDisplayed => {
-                    print_version();
-                    println!();
-                    Ok(())
-                },
-                _ => err.exit()
-            }
+      let pacts = load_pacts(sources, matches.is_present("insecure-tls")).await;
+      debug!("pacts = {:?}", pacts);
+      if pacts.iter().any(|p| p.is_err()) {
+        error!("There were errors loading the pact files.");
+        for error in pacts.iter().filter(|p| p.is_err()).cloned().map(|e| e.unwrap_err()) {
+          error!("  - {}", error);
         }
+        Err(3)
+      } else {
+        let port = matches.value_of("port").unwrap_or("0").parse::<u16>().unwrap();
+        let provider_state = matches.value_of("provider-state")
+            .map(|filter| Regex::new(filter).unwrap());
+        let provider_state_header_name = matches.value_of("provider-state-header-name")
+            .map(|filter| String::from(filter));
+        let pacts = pacts.iter().cloned().map(|p| p.unwrap()).collect();
+        let server_handler = ServerHandler::new(pacts, matches.is_present("cors"),
+          matches.is_present("cors-referer"), provider_state, provider_state_header_name);
+        server_handler.start_server(port)
+      }
+    },
+    Err(ref err) => {
+      match err.kind {
+        ErrorKind::HelpDisplayed => {
+          println!("{}", err.message);
+          Ok(())
+        },
+        ErrorKind::VersionDisplayed => {
+          print_version();
+          println!();
+          Ok(())
+        },
+        _ => err.exit()
+      }
     }
+  }
 }
 
 fn setup_logger(level: &str) {
