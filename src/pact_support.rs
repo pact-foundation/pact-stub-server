@@ -6,6 +6,9 @@ use hyper::{Body, Response as HyperResponse};
 use pact_matching::models::{HttpPart, OptionalBody, Request, Response};
 use pact_matching::models::parse_query_string;
 use std::collections::HashMap;
+use log::*;
+use pact_matching::s;
+use maplit::*;
 
 fn extract_query_string(uri: &Uri) -> Option<HashMap<String, Vec<String>>> {
     match uri.query() {

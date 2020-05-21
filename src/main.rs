@@ -60,11 +60,6 @@
 
 #![warn(missing_docs)]
 
-#[macro_use] extern crate clap;
-#[macro_use] extern crate log;
-#[macro_use] extern crate maplit;
-#[macro_use] extern crate pact_matching;
-
 use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
 use log::LevelFilter;
 use pact_matching::models::{Pact, PactSpecification};
@@ -80,6 +75,9 @@ use std::fmt::Display;
 use serde::export::Formatter;
 use futures::stream::*;
 use crate::server::ServerHandler;
+use pact_matching::s;
+use log::*;
+use clap::crate_version;
 
 mod pact_support;
 mod server;

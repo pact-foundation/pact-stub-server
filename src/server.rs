@@ -12,6 +12,9 @@ use futures::task::{Context, Poll};
 use hyper::server::conn::AddrStream;
 use std::future::Future;
 use futures::executor::block_on;
+use maplit::*;
+use pact_matching::s;
+use log::*;
 
 #[derive(Clone)]
 pub struct ServerHandler {
@@ -203,6 +206,8 @@ mod test {
     use pact_matching::models::matchingrules::*;
     use pact_matching::models::provider_states::*;
     use regex::Regex;
+    use maplit::*;
+    use pact_matching::{s, matchingrules};
 
     #[test]
     fn match_request_finds_the_most_appropriate_response() {

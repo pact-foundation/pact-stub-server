@@ -2,6 +2,7 @@ use quickcheck::{TestResult, quickcheck};
 use rand::Rng;
 use super::{integer_value, regex_value};
 use expectest::prelude::*;
+use pact_matching::s;
 
 #[test]
 fn validates_integer_value() {
