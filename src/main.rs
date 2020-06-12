@@ -342,7 +342,8 @@ async fn handle_command_args() -> Result<(), i32> {
         .long("empty-provider-state")
         .takes_value(false)
         .use_delimiter(false)
-        .help("Include empty provider states when filtering"));
+        .requires("provider-state")
+        .help("Include empty provider states when filtering with --provider-state"));
 
   let matches = app.get_matches_safe();
   match matches {
