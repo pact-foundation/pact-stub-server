@@ -8,7 +8,6 @@ use pact_matching::models::parse_query_string;
 use std::collections::HashMap;
 use log::*;
 use pact_matching::s;
-use maplit::*;
 
 fn extract_query_string(uri: &Uri) -> Option<HashMap<String, Vec<String>>> {
     match uri.query() {
@@ -30,10 +29,10 @@ fn extract_headers(headers: &HeaderMap<HeaderValue>) -> Option<HashMap<String, V
               ()
             })
           ).collect();
-        ((name.as_str().into(), parsed_vals.iter().cloned()
+        (name.as_str().into(), parsed_vals.iter().cloned()
           .filter(|val| val.is_ok())
           .map(|val| val.unwrap_or_default())
-          .collect()))
+          .collect())
       })
       .collect();
     Some(result)
@@ -90,6 +89,7 @@ mod test {
     use http::status::StatusCode;
     use pact_matching::models::{OptionalBody, Response};
     use super::*;
+    use maplit::*;
 
     #[test]
     fn test_response() {
