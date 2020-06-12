@@ -22,7 +22,8 @@ pub struct ServerHandler {
     auto_cors: bool,
     cors_referer: bool,
     provider_state: Option<Regex>,
-    provider_state_header_name: Option<String>
+    provider_state_header_name: Option<String>,
+    empty_provider_states: bool
 }
 
 fn method_supports_payload(request: &Request) -> bool {
@@ -32,8 +33,9 @@ fn method_supports_payload(request: &Request) -> bool {
     }
 }
 
-fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool, sources: &Vec<Pact>, provider_state: Option<Regex>) -> Result<Response, String> {
-    match provider_state.clone() {
+fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool, sources: &Vec<Pact>,
+                         provider_state: Option<Regex>, empty_provider_states: bool) -> Result<Response, String> {
+    match &provider_state {
         Some(state) => info!("Filtering interactions by provider state regex '{}'", state),
         None => ()
     }
@@ -41,8 +43,9 @@ fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool,
         .iter()
         .flat_map(|pact| pact.interactions.clone())
         .filter(|i| match provider_state {
-            Some(ref regex) => i.provider_states.iter().any(|state| regex.is_match(state.name
-                .as_str())),
+            Some(ref regex) => empty_provider_states && i.provider_states.is_empty() ||
+              i.provider_states.iter().any(|state|
+                empty_provider_states && state.name.is_empty() || regex.is_match(state.name.as_str())),
             None => true
         })
         .map(|i| (i.clone(), pact_matching::match_request(i.request, request.clone())))
@@ -91,12 +94,14 @@ fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool,
     }
 }
 
-fn handle_request(request: Request, auto_cors: bool, cors_referrer: bool, sources: Vec<Pact>, provider_state: Option<Regex>) -> Response {
+fn handle_request(request: Request, auto_cors: bool, cors_referrer: bool, sources: Vec<Pact>,
+                  provider_state: Option<Regex>, empty_provider_states: bool) -> Response {
     info! ("===> Received {}", request);
     debug!("     body: '{}'", request.body.str_value());
     debug!("     matching_rules: {:?}", request.matching_rules);
     debug!("     generators: {:?}", request.generators);
-    match find_matching_request(&request, auto_cors, cors_referrer, &sources, provider_state) {
+    match find_matching_request(&request, auto_cors, cors_referrer, &sources, provider_state,
+                                empty_provider_states) {
         Ok(response) => response,
         Err(msg) => {
             warn!("{}, sending {}", msg, StatusCode::NOT_FOUND);
@@ -114,13 +119,14 @@ fn handle_request(request: Request, auto_cors: bool, cors_referrer: bool, source
 
 impl ServerHandler {
   pub fn new(sources: Vec<Pact>, auto_cors: bool, cors_referer: bool, provider_state: Option<Regex>,
-             provider_state_header_name: Option<String>) ->  ServerHandler {
+             provider_state_header_name: Option<String>, empty_provider_states: bool) ->  ServerHandler {
     ServerHandler {
       sources,
       auto_cors,
       cors_referer,
       provider_state,
-      provider_state_header_name
+      provider_state_header_name,
+      empty_provider_states
     }
   }
 
@@ -165,6 +171,7 @@ impl Service<HyperRequest<Body>> for ServerHandler {
     let sources = self.sources.clone();
     let provider_state = self.provider_state.clone();
     let provider_state_header_name = self.provider_state_header_name.clone();
+    let empty_provider_states = self.empty_provider_states;
 
     Box::pin(async move {
       let (parts, body) = req.into_parts();
@@ -193,7 +200,8 @@ impl Service<HyperRequest<Body>> for ServerHandler {
         }
       };
       let request = pact_support::hyper_request_to_pact_request(parts, body);
-      let response = handle_request(request, auto_cors, cors_referrer, sources, provider_state);
+      let response = handle_request(request, auto_cors, cors_referrer, sources, provider_state,
+        empty_provider_states);
       pact_support::pact_response_to_hyper_response(&response)
     })
   }
@@ -220,7 +228,7 @@ mod test {
 
         let request1 = Request::default();
 
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None)).to(be_ok().value(interaction1.response));
+        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_ok().value(interaction1.response));
     }
 
     #[test]
@@ -235,7 +243,7 @@ mod test {
 
         let request1 = Request { method: s!("POST"), .. Request::default() };
 
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None)).to(be_err());
+        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_err());
     }
 
     #[test]
@@ -249,7 +257,7 @@ mod test {
 
         let request1 = Request { path: s!("/two"), .. Request::default() };
 
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None)).to(be_err());
+        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_err());
     }
 
     #[test]
@@ -267,7 +275,7 @@ mod test {
             query: Some(hashmap!{ s!("A") => vec![ s!("C") ] }),
             .. Request::default() };
 
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None)).to(be_err());
+        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_err());
     }
 
     #[test]
@@ -303,10 +311,10 @@ mod test {
         let request4 = Request { method: s!("PUT"), headers: Some(hashmap!{ s!("Content-Type") => vec![s!("application/json")] }),
             .. Request::default() };
 
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1.clone(), pact2.clone()], None)).to(be_ok());
-        expect!(super::find_matching_request(&request2, false, false, &vec![pact1.clone(), pact2.clone()], None)).to(be_err());
-        expect!(super::find_matching_request(&request3, false, false, &vec![pact1.clone(), pact2.clone()], None)).to(be_ok());
-        expect!(super::find_matching_request(&request4, false, false, &vec![pact1.clone(), pact2.clone()], None)).to(be_ok());
+        expect!(super::find_matching_request(&request1, false, false, &vec![pact1.clone(), pact2.clone()], None, false)).to(be_ok());
+        expect!(super::find_matching_request(&request2, false, false, &vec![pact1.clone(), pact2.clone()], None, false)).to(be_err());
+        expect!(super::find_matching_request(&request3, false, false, &vec![pact1.clone(), pact2.clone()], None, false)).to(be_ok());
+        expect!(super::find_matching_request(&request4, false, false, &vec![pact1.clone(), pact2.clone()], None, false)).to(be_ok());
     }
 
     #[test]
@@ -330,7 +338,7 @@ mod test {
             body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
             .. Request::default() };
 
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None)).to(be_ok().value(interaction2.response));
+        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_ok().value(interaction2.response));
     }
 
     #[test]
@@ -342,8 +350,8 @@ mod test {
             method: s!("OPTIONS"),
             .. Request::default() };
 
-        expect!(super::find_matching_request(&request1, true, false, &vec![pact1.clone()], None)).to(be_ok());
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1.clone()], None)).to(be_err());
+        expect!(super::find_matching_request(&request1, true, false, &vec![pact1.clone()], None, false)).to(be_ok());
+        expect!(super::find_matching_request(&request1, false, false, &vec![pact1.clone()], None, false)).to(be_err());
     }
 
     #[test]
@@ -380,7 +388,7 @@ mod test {
             query: Some(hashmap!{ s!("page") => vec![ s!("3") ] }),
             .. Request::default() };
 
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2.clone()], None)).to(be_ok());
+        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2.clone()], None, false)).to(be_ok());
     }
 
     #[test]
@@ -407,17 +415,52 @@ mod test {
             request: Request::default(),
             response: Response { status: 203, .. Response::default() },
             .. Interaction::default() };
+        let interaction4 = Interaction {
+          response: Response { status: 204, .. Response::default() },
+          .. Interaction::default() };
 
-        let pact = Pact { interactions: vec![ interaction1, interaction2, interaction3 ],
+        let pact = Pact { interactions: vec![ interaction1, interaction2, interaction3, interaction4 ],
             .. Pact::default() };
 
         let request = Request::default();
 
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state one").unwrap()))).to(be_ok().value(response1.clone()));
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state two").unwrap()))).to(be_ok().value(response2.clone()));
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state three").unwrap()))).to(be_ok().value(response3.clone()));
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state four").unwrap()))).to(be_err());
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state .*").unwrap()))).to(be_ok().value(response1.clone()));
+        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state one").unwrap()), false)).to(be_ok().value(response1.clone()));
+        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state two").unwrap()), false)).to(be_ok().value(response2.clone()));
+        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state three").unwrap()), false)).to(be_ok().value(response3.clone()));
+        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state four").unwrap()), false)).to(be_err());
+        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state .*").unwrap()), false)).to(be_ok().value(response1.clone()));
+    }
+
+    #[test]
+    fn match_request_filters_interactions_if_provider_state_filter_is_provided_and_empty_values_included() {
+      let interaction1 = Interaction {
+        provider_states: vec![ ProviderState::default(&"state one".into()) ],
+        request: Request::default(),
+        response: Response { status: 201, .. Response::default() },
+        .. Interaction::default() };
+
+      let response2 = Response { status: 202, .. Response::default() };
+      let interaction2 = Interaction {
+        provider_states: vec![ ProviderState::default(&"".into()) ],
+        request: Request::default(),
+        response: Response { status: 202, .. Response::default() },
+        .. Interaction::default() };
+
+      let response3 = Response { status: 203, .. Response::default() };
+      let interaction3 = Interaction {
+        request: Request::default(),
+        response: Response { status: 203, .. Response::default() },
+        .. Interaction::default() };
+
+      let pact = Pact { interactions: vec![ interaction1.clone(), interaction2.clone(), interaction3.clone() ],
+        .. Pact::default() };
+
+      let request = Request::default();
+
+      expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("any state").unwrap()), true)).to(be_ok().value(response2.clone()));
+
+      let pact2 = Pact { interactions: vec![ interaction1.clone(), interaction3.clone() ], .. Pact::default() };
+      expect!(super::find_matching_request(&request, false, false, &vec![pact2.clone()], Some(Regex::new("any state").unwrap()), true)).to(be_ok().value(response3.clone()));
     }
 
     #[test]
@@ -430,7 +473,7 @@ mod test {
 
         let request = Request { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Y")] }), .. Request::default() };
 
-        let result = super::find_matching_request(&request, false, false, &vec![pact], None);
+        let result = super::find_matching_request(&request, false, false, &vec![pact], None, false);
         expect!(result).to(be_ok().value(interaction.response));
     }
 }

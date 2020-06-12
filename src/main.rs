@@ -337,7 +337,12 @@ async fn handle_command_args() -> Result<(), i32> {
           .number_of_values(1)
           .empty_values(false)
           .help("Name of the header parameter containing the provider state to be used in case \
-          multiple matching interactions are found"));
+          multiple matching interactions are found"))
+      .arg(Arg::with_name("empty-provider-state")
+        .long("empty-provider-state")
+        .takes_value(false)
+        .use_delimiter(false)
+        .help("Include empty provider states when filtering"));
 
   let matches = app.get_matches_safe();
   match matches {
@@ -360,9 +365,11 @@ async fn handle_command_args() -> Result<(), i32> {
             .map(|filter| Regex::new(filter).unwrap());
         let provider_state_header_name = matches.value_of("provider-state-header-name")
             .map(|filter| String::from(filter));
+        let empty_provider_states = matches.is_present("empty-provider-state");
         let pacts = pacts.iter().cloned().map(|p| p.unwrap()).collect();
         let server_handler = ServerHandler::new(pacts, matches.is_present("cors"),
-          matches.is_present("cors-referer"), provider_state, provider_state_header_name);
+          matches.is_present("cors-referer"), provider_state, provider_state_header_name,
+          empty_provider_states);
         server_handler.start_server(port)
       }
     },
