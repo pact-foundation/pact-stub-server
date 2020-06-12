@@ -1,5 +1,14 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.4.1 - Update to latest Pact matching crate
+
+* 9fad496 - feat: update to latest pact matching crate (Ronald Holshausen, Fri Jun 12 13:03:50 2020 +1000)
+* 4d7e464 - chore: make --empty-provider-state flag require --provider-state parameter (Ronald Holshausen, Fri Jun 12 11:48:17 2020 +1000)
+* 729674c - feat: add option to include empty provider states when using a filter #34 (Ronald Holshausen, Fri Jun 12 11:42:41 2020 +1000)
+* 17e8b3b - chore: updated dependencies to latest + code cleanup (Ronald Holshausen, Fri Jun 12 11:03:30 2020 +1000)
+* 3083fa1 - chore: upgrade crates and cleanup some imports (Ronald Holshausen, Thu May 21 13:17:48 2020 +1000)
+* ce7093f - bump version to 0.4.1 (Ronald Holshausen, Sun Apr 5 17:14:31 2020 +1000)
+
 # 0.4.0 - Upgrade hyper to 0.13 and Rust async/await
 
 * 07e2d9c - chore: Upgrade hyper to 0.13 and Rust async/await (Ronald Holshausen, Sun Apr 5 16:12:34 2020 +1000)
