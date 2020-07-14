@@ -192,7 +192,7 @@ impl Service<HyperRequest<Body>> for ServerHandler {
         Ok(contents) => if contents.is_empty() {
           OptionalBody::Empty
         } else {
-          OptionalBody::Present(contents.to_vec())
+          OptionalBody::Present(contents.to_vec(), None)
         },
         Err(err) => {
           warn!("Failed to read request body: {}", err);

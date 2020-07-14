@@ -71,10 +71,11 @@ pub fn pact_response_to_hyper_response(response: &Response) -> Result<HyperRespo
     res = res.header(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
   }
 
-  match response.body {
-    OptionalBody::Present(ref body) => {
+  match &response.body {
+    OptionalBody::Present(ref body, content_type) => {
       if !response.has_header(&CONTENT_TYPE.as_str().into()) {
-        res = res.header(CONTENT_TYPE, response.content_type());
+        let content_type = content_type.clone().unwrap_or_else(|| response.content_type());
+        res = res.header(CONTENT_TYPE, content_type);
       }
       res.body(Body::from(body.clone()))
     },
