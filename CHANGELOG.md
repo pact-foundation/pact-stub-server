@@ -1,5 +1,12 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.4.2 - Fix concurrency issue
+
+* 20ea51f - fix: start the hyper server on a blocking thread (Ronald Holshausen, Tue Jul 14 10:49:37 2020 +1000)
+* 558baae - fix: tests after updating crates (Ronald Holshausen, Tue Jul 14 10:29:18 2020 +1000)
+* 6884340 - chore: update crates (Ronald Holshausen, Tue Jul 14 10:07:02 2020 +1000)
+* b8fef54 - bump version to 0.4.2 (Ronald Holshausen, Fri Jun 12 13:13:21 2020 +1000)
+
 # 0.4.1 - Update to latest Pact matching crate
 
 * 9fad496 - feat: update to latest pact matching crate (Ronald Holshausen, Fri Jun 12 13:03:50 2020 +1000)
