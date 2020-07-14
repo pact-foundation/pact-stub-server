@@ -282,14 +282,14 @@ mod test {
     fn match_request_excludes_put_or_post_requests_with_different_bodies() {
         let interaction1 = Interaction { request: Request {
             method: s!("PUT"),
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into()),
+            body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
             .. Request::default() },
             response: Response { status: 200, .. Response::default() },
             .. Interaction::default() };
 
         let interaction2 = Interaction { request: Request {
             method: s!("PUT"),
-            body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into()),
+            body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
             matching_rules: matchingrules!{
                 "body" => {
                     "$.c" => [ MatchingRule::Integer ]
@@ -302,11 +302,11 @@ mod test {
         let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
         let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
 
-        let request1 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into()),
+        let request1 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
             .. Request::default() };
-        let request2 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 5, \"c\": 3}".as_bytes().into()),
+        let request2 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 5, \"c\": 3}".as_bytes().into(), None),
             .. Request::default() };
-        let request3 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 16}".as_bytes().into()),
+        let request3 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 16}".as_bytes().into(), None),
             .. Request::default() };
         let request4 = Request { method: s!("PUT"), headers: Some(hashmap!{ s!("Content-Type") => vec![s!("application/json")] }),
             .. Request::default() };
@@ -320,13 +320,13 @@ mod test {
     #[test]
     fn match_request_returns_the_closest_match() {
         let interaction1 = Interaction { request: Request {
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into()),
+            body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
             .. Request::default() },
             response: Response { status: 200, .. Response::default() },
             .. Interaction::default() };
 
         let interaction2 = Interaction { request: Request {
-            body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into()),
+            body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
             .. Request::default() },
             response: Response { status: 201, .. Response::default() },
             .. Interaction::default() };
@@ -335,7 +335,7 @@ mod test {
         let pact2 = Pact { interactions: vec![ interaction2.clone() ], .. Pact::default() };
 
         let request1 = Request {
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
+            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
             .. Request::default() };
 
         expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_ok().value(interaction2.response));

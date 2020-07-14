@@ -111,7 +111,7 @@ mod test {
         let response = Response {
             status: 201,
             headers: Some(hashmap! { s!("Content-Type") => vec![s!("text/dizzy")] }),
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
+            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
             .. Response::default()
         };
         let hyper_response = pact_response_to_hyper_response(&response).unwrap();
@@ -124,7 +124,7 @@ mod test {
     #[test]
     fn adds_a_content_type_if_there_is_not_one_and_there_is_a_body() {
         let response = Response {
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into()),
+            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
             .. Response::default()
         };
         let hyper_response = pact_response_to_hyper_response(&response).unwrap();
