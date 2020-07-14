@@ -24,9 +24,9 @@ maplit = "1.0.2"
 itertools = "0.9.0"
 native-tls = "0.2"
 hyper-tls = "0.4.1"
-hyper = { version = "0.13", features = ["stream"] }
+hyper = "0.13"
 http = "0.2.0"
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "0.2", features = ["rt-threaded", "macros"] }
 futures = "0.3"
 base64 = "0.12.0"
 regex = "1.3.5"

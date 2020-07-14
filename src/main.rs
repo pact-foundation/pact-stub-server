@@ -371,7 +371,9 @@ async fn handle_command_args() -> Result<(), i32> {
         let server_handler = ServerHandler::new(pacts, matches.is_present("cors"),
           matches.is_present("cors-referer"), provider_state, provider_state_header_name,
           empty_provider_states);
-        server_handler.start_server(port)
+        tokio::task::spawn_blocking(move || {
+          server_handler.start_server(port)
+        }).await.unwrap()
       }
     },
     Err(ref err) => {
