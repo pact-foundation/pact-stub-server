@@ -1,5 +1,13 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.4.3 - Performance optmisation
+
+* f9515fd - fix: tests after performance optimisation (Ronald Holshausen, Sun Jul 26 12:34:11 2020 +1000)
+* 998ce51 - feat: filter interactions by method and path first (Ronald Holshausen, Sun Jul 26 12:18:50 2020 +1000)
+* a48d40e - feat: re-enable HTTP keepalive and get all interactions when server starts (Ronald Holshausen, Sun Jul 26 11:50:46 2020 +1000)
+* 6a2d2bf - fix: when loading files from a directory, only load json files (Ronald Holshausen, Sun Jul 26 10:24:55 2020 +1000)
+* d128a65 - bump version to 0.4.3 (Ronald Holshausen, Tue Jul 14 11:10:49 2020 +1000)
+
 # 0.4.2 - Fix concurrency issue
 
 * 20ea51f - fix: start the hyper server on a blocking thread (Ronald Holshausen, Tue Jul 14 10:49:37 2020 +1000)
