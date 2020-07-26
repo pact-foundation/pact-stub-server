@@ -213,7 +213,7 @@ impl Service<HyperRequest<Body>> for ServerHandler {
 #[cfg(test)]
 mod test {
     use expectest::prelude::*;
-    use pact_matching::models::{Interaction, OptionalBody, Pact, Request, Response};
+    use pact_matching::models::{Interaction, OptionalBody, Request, Response};
     use pact_matching::models::matchingrules::*;
     use pact_matching::models::provider_states::*;
     use regex::Regex;
@@ -222,216 +222,212 @@ mod test {
 
     #[test]
     fn match_request_finds_the_most_appropriate_response() {
-        let interaction1 = Interaction::default();
+      let interaction1 = Interaction::default();
+      let interaction2 = Interaction::default();
 
-        let interaction2 = Interaction::default();
+      let request1 = Request::default();
 
-        let pact1 = Pact { interactions: vec![ interaction1.clone() ], .. Pact::default() };
-        let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
-
-        let request1 = Request::default();
-
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_ok().value(interaction1.response));
+      expect!(super::find_matching_request(&request1, false, false,
+        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_ok().value(interaction1.response));
     }
 
     #[test]
     fn match_request_excludes_requests_with_different_methods() {
-        let interaction1 = Interaction { request: Request { method: s!("PUT"),
-            .. Request::default() }, .. Interaction::default() };
+      let interaction1 = Interaction { request: Request { method: s!("PUT"),
+          .. Request::default() }, .. Interaction::default() };
 
-        let interaction2 = Interaction { .. Interaction::default() };
+      let interaction2 = Interaction { .. Interaction::default() };
 
-        let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
-        let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+      let request1 = Request { method: s!("POST"), .. Request::default() };
 
-        let request1 = Request { method: s!("POST"), .. Request::default() };
-
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_err());
+      expect!(super::find_matching_request(&request1, false, false,
+        &vec![interaction1, interaction2], None, false)).to(be_err());
     }
 
     #[test]
     fn match_request_excludes_requests_with_different_paths() {
-        let interaction1 = Interaction { request: Request { path: s!("/one"), .. Request::default() }, .. Interaction::default() };
+      let interaction1 = Interaction { request: Request { path: s!("/one"), .. Request::default() }, .. Interaction::default() };
 
-        let interaction2 = Interaction { .. Interaction::default() };
+      let interaction2 = Interaction { .. Interaction::default() };
 
-        let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
-        let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+      let request1 = Request { path: s!("/two"), .. Request::default() };
 
-        let request1 = Request { path: s!("/two"), .. Request::default() };
-
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_err());
+      expect!(super::find_matching_request(&request1, false, false,
+        &vec![interaction1, interaction2], None, false)).to(be_err());
     }
 
     #[test]
     fn match_request_excludes_requests_with_different_query_params() {
-        let interaction1 = Interaction { request: Request {
-            query: Some(hashmap!{ s!("A") => vec![ s!("B") ] }),
-            .. Request::default() }, .. Interaction::default() };
+      let interaction1 = Interaction { request: Request {
+          query: Some(hashmap!{ s!("A") => vec![ s!("B") ] }),
+          .. Request::default() }, .. Interaction::default() };
 
-        let interaction2 = Interaction { .. Interaction::default() };
+      let interaction2 = Interaction { .. Interaction::default() };
 
-        let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
-        let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+      let request1 = Request {
+          query: Some(hashmap!{ s!("A") => vec![ s!("C") ] }),
+          .. Request::default() };
 
-        let request1 = Request {
-            query: Some(hashmap!{ s!("A") => vec![ s!("C") ] }),
-            .. Request::default() };
-
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_err());
+      expect!(super::find_matching_request(&request1, false, false,
+        &vec![interaction1, interaction2], None, false)).to(be_err());
     }
 
     #[test]
     fn match_request_excludes_put_or_post_requests_with_different_bodies() {
-        let interaction1 = Interaction { request: Request {
-            method: s!("PUT"),
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
-            .. Request::default() },
-            response: Response { status: 200, .. Response::default() },
-            .. Interaction::default() };
+      let interaction1 = Interaction { request: Request {
+          method: s!("PUT"),
+          body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
+          .. Request::default() },
+          response: Response { status: 200, .. Response::default() },
+          .. Interaction::default() };
 
-        let interaction2 = Interaction { request: Request {
-            method: s!("PUT"),
-            body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
-            matching_rules: matchingrules!{
-                "body" => {
-                    "$.c" => [ MatchingRule::Integer ]
-                }
-            },
-            .. Request::default() },
-            response: Response { status: 201, .. Response::default() },
-            .. Interaction::default() };
+      let interaction2 = Interaction { request: Request {
+          method: s!("PUT"),
+          body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
+          matching_rules: matchingrules!{
+              "body" => {
+                  "$.c" => [ MatchingRule::Integer ]
+              }
+          },
+          .. Request::default() },
+          response: Response { status: 201, .. Response::default() },
+          .. Interaction::default() };
 
-        let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
-        let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+      let request1 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
+          .. Request::default() };
+      let request2 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 5, \"c\": 3}".as_bytes().into(), None),
+          .. Request::default() };
+      let request3 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 16}".as_bytes().into(), None),
+          .. Request::default() };
+      let request4 = Request { method: s!("PUT"), headers: Some(hashmap!{ s!("Content-Type") => vec![s!("application/json")] }),
+          .. Request::default() };
 
-        let request1 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
-            .. Request::default() };
-        let request2 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 5, \"c\": 3}".as_bytes().into(), None),
-            .. Request::default() };
-        let request3 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 16}".as_bytes().into(), None),
-            .. Request::default() };
-        let request4 = Request { method: s!("PUT"), headers: Some(hashmap!{ s!("Content-Type") => vec![s!("application/json")] }),
-            .. Request::default() };
-
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1.clone(), pact2.clone()], None, false)).to(be_ok());
-        expect!(super::find_matching_request(&request2, false, false, &vec![pact1.clone(), pact2.clone()], None, false)).to(be_err());
-        expect!(super::find_matching_request(&request3, false, false, &vec![pact1.clone(), pact2.clone()], None, false)).to(be_ok());
-        expect!(super::find_matching_request(&request4, false, false, &vec![pact1.clone(), pact2.clone()], None, false)).to(be_ok());
+      expect!(super::find_matching_request(&request1, false, false,
+        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_ok());
+      expect!(super::find_matching_request(&request2, false, false,
+        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_err());
+      expect!(super::find_matching_request(&request3, false,
+        false, &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_ok());
+      expect!(super::find_matching_request(&request4, false, false,
+        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_ok());
     }
 
     #[test]
     fn match_request_returns_the_closest_match() {
-        let interaction1 = Interaction { request: Request {
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
-            .. Request::default() },
-            response: Response { status: 200, .. Response::default() },
-            .. Interaction::default() };
+      let interaction1 = Interaction { request: Request {
+          body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
+          .. Request::default() },
+          response: Response { status: 200, .. Response::default() },
+          .. Interaction::default() };
 
-        let interaction2 = Interaction { request: Request {
-            body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
-            .. Request::default() },
-            response: Response { status: 201, .. Response::default() },
-            .. Interaction::default() };
+      let interaction2 = Interaction { request: Request {
+          body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
+          .. Request::default() },
+          response: Response { status: 201, .. Response::default() },
+          .. Interaction::default() };
 
-        let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
-        let pact2 = Pact { interactions: vec![ interaction2.clone() ], .. Pact::default() };
+      let request1 = Request {
+          body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
+          .. Request::default() };
 
-        let request1 = Request {
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
-            .. Request::default() };
-
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2], None, false)).to(be_ok().value(interaction2.response));
+      expect!(super::find_matching_request(&request1, false, false,
+        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_ok().value(interaction2.response));
     }
 
     #[test]
     fn with_auto_cors_return_200_with_an_option_request() {
-        let interaction1 = Interaction::default();
-        let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
+      let interaction1 = Interaction::default();
 
-        let request1 = Request {
-            method: s!("OPTIONS"),
-            .. Request::default() };
+      let request1 = Request {
+          method: s!("OPTIONS"),
+          .. Request::default() };
 
-        expect!(super::find_matching_request(&request1, true, false, &vec![pact1.clone()], None, false)).to(be_ok());
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1.clone()], None, false)).to(be_err());
+      expect!(super::find_matching_request(&request1, true, false,
+        &vec![interaction1.clone()], None, false)).to(be_ok());
+      expect!(super::find_matching_request(&request1, false, false,
+        &vec![interaction1.clone()], None, false)).to(be_err());
     }
 
     #[test]
     fn match_request_with_query_params() {
-        let matching_rules = matchingrules!{
-            "query" => {
-                "page[0]" => [ MatchingRule::Type ]
-            }
-        };
-        let interaction1 = Interaction {
-            request: Request {
-                path: s!("/api/objects"),
-                query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
-                .. Request::default()
-            },
-            .. Interaction::default()
-        };
+      let matching_rules = matchingrules!{
+          "query" => {
+              "page[0]" => [ MatchingRule::Type ]
+          }
+      };
+      let interaction1 = Interaction {
+          request: Request {
+              path: s!("/api/objects"),
+              query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
+              .. Request::default()
+          },
+          .. Interaction::default()
+      };
 
-        let interaction2 = Interaction {
-            request: Request {
-                path: s!("/api/objects"),
-                query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
-                matching_rules,
-                .. Request::default()
-            },
-            .. Interaction::default()
-        };
+      let interaction2 = Interaction {
+          request: Request {
+              path: s!("/api/objects"),
+              query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
+              matching_rules,
+              .. Request::default()
+          },
+          .. Interaction::default()
+      };
 
-        let pact1 = Pact { interactions: vec![ interaction1 ], .. Pact::default() };
-        let pact2 = Pact { interactions: vec![ interaction2 ], .. Pact::default() };
+      let request1 = Request {
+          path: s!("/api/objects"),
+          query: Some(hashmap!{ s!("page") => vec![ s!("3") ] }),
+          .. Request::default() };
 
-        let request1 = Request {
-            path: s!("/api/objects"),
-            query: Some(hashmap!{ s!("page") => vec![ s!("3") ] }),
-            .. Request::default() };
-
-        expect!(super::find_matching_request(&request1, false, false, &vec![pact1, pact2.clone()], None, false)).to(be_ok());
+      expect!(super::find_matching_request(&request1, false, false,
+        &vec![interaction1, interaction2], None, false)).to(be_ok());
     }
 
     #[test]
     fn match_request_filters_interactions_if_provider_state_filter_is_provided() {
-        let response1 = Response { status: 201, .. Response::default() };
-        let interaction1 = Interaction {
-            provider_states: vec![ ProviderState::default(&"state one".into()) ],
-            request: Request::default(),
-            response: Response { status: 201, .. Response::default() },
-            .. Interaction::default() };
-
-        let response2 = Response { status: 202, .. Response::default() };
-        let interaction2 = Interaction {
-            provider_states: vec![ ProviderState::default(&"state two".into()) ],
-            request: Request::default(),
-            response: Response { status: 202, .. Response::default() },
-            .. Interaction::default() };
-
-        let response3 = Response { status: 203, .. Response::default() };
-        let interaction3 = Interaction {
-            provider_states: vec![ ProviderState::default(&"state one".into()),
-                                   ProviderState::default(&"state two".into()),
-                                   ProviderState::default(&"state three".into()) ],
-            request: Request::default(),
-            response: Response { status: 203, .. Response::default() },
-            .. Interaction::default() };
-        let interaction4 = Interaction {
-          response: Response { status: 204, .. Response::default() },
+      let response1 = Response { status: 201, .. Response::default() };
+      let interaction1 = Interaction {
+          provider_states: vec![ ProviderState::default(&"state one".into()) ],
+          request: Request::default(),
+          response: Response { status: 201, .. Response::default() },
           .. Interaction::default() };
 
-        let pact = Pact { interactions: vec![ interaction1, interaction2, interaction3, interaction4 ],
-            .. Pact::default() };
+      let response2 = Response { status: 202, .. Response::default() };
+      let interaction2 = Interaction {
+          provider_states: vec![ ProviderState::default(&"state two".into()) ],
+          request: Request::default(),
+          response: Response { status: 202, .. Response::default() },
+          .. Interaction::default() };
 
-        let request = Request::default();
+      let response3 = Response { status: 203, .. Response::default() };
+      let interaction3 = Interaction {
+          provider_states: vec![ ProviderState::default(&"state one".into()),
+                                 ProviderState::default(&"state two".into()),
+                                 ProviderState::default(&"state three".into()) ],
+          request: Request::default(),
+          response: Response { status: 203, .. Response::default() },
+          .. Interaction::default() };
+      let interaction4 = Interaction {
+        response: Response { status: 204, .. Response::default() },
+        .. Interaction::default() };
 
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state one").unwrap()), false)).to(be_ok().value(response1.clone()));
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state two").unwrap()), false)).to(be_ok().value(response2.clone()));
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state three").unwrap()), false)).to(be_ok().value(response3.clone()));
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state four").unwrap()), false)).to(be_err());
-        expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("state .*").unwrap()), false)).to(be_ok().value(response1.clone()));
+      let request = Request::default();
+
+      expect!(super::find_matching_request(&request, false, false,
+        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
+        Some(Regex::new("state one").unwrap()), false)).to(be_ok().value(response1.clone()));
+      expect!(super::find_matching_request(&request, false, false,
+        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
+        Some(Regex::new("state two").unwrap()), false)).to(be_ok().value(response2.clone()));
+      expect!(super::find_matching_request(&request, false, false,
+        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
+        Some(Regex::new("state three").unwrap()), false)).to(be_ok().value(response3.clone()));
+      expect!(super::find_matching_request(&request, false, false,
+        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
+        Some(Regex::new("state four").unwrap()), false)).to(be_err());
+      expect!(super::find_matching_request(&request, false, false,
+        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
+        Some(Regex::new("state .*").unwrap()), false)).to(be_ok().value(response1.clone()));
     }
 
     #[test]
@@ -455,28 +451,28 @@ mod test {
         response: Response { status: 203, .. Response::default() },
         .. Interaction::default() };
 
-      let pact = Pact { interactions: vec![ interaction1.clone(), interaction2.clone(), interaction3.clone() ],
-        .. Pact::default() };
-
       let request = Request::default();
 
-      expect!(super::find_matching_request(&request, false, false, &vec![pact.clone()], Some(Regex::new("any state").unwrap()), true)).to(be_ok().value(response2.clone()));
+      expect!(super::find_matching_request(&request, false, false,
+        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone()],
+        Some(Regex::new("any state").unwrap()), true)).to(be_ok().value(response2.clone()));
 
-      let pact2 = Pact { interactions: vec![ interaction1.clone(), interaction3.clone() ], .. Pact::default() };
-      expect!(super::find_matching_request(&request, false, false, &vec![pact2.clone()], Some(Regex::new("any state").unwrap()), true)).to(be_ok().value(response3.clone()));
+      expect!(super::find_matching_request(&request, false, false,
+        &vec![interaction1.clone(), interaction3.clone()],
+        Some(Regex::new("any state").unwrap()), true)).to(be_ok().value(response3.clone()));
     }
 
     #[test]
     fn handles_repeated_headers_values() {
-        let interaction = Interaction {
-            request: Request { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Z")] }),  .. Request::default() },
-            response: Response { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Y")] }), .. Response::default() },
-            .. Interaction::default() };
-        let pact = Pact { interactions: vec![ interaction.clone() ], .. Pact::default() };
+      let interaction = Interaction {
+          request: Request { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Z")] }),  .. Request::default() },
+          response: Response { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Y")] }), .. Response::default() },
+          .. Interaction::default() };
 
-        let request = Request { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Y")] }), .. Request::default() };
+      let request = Request { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Y")] }), .. Request::default() };
 
-        let result = super::find_matching_request(&request, false, false, &vec![pact], None, false);
-        expect!(result).to(be_ok().value(interaction.response));
+      let result = super::find_matching_request(&request, false, false,
+                                                &vec![interaction.clone()], None, false);
+      expect!(result).to(be_ok().value(interaction.response));
     }
 }
