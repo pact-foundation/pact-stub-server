@@ -84,36 +84,47 @@ mod server;
 
 #[derive(Debug, Clone)]
 struct PactError {
-  message: String
+  message: String,
+  path: Option<String>
 }
 
 impl PactError {
   fn new(str: String) -> PactError {
-    PactError { message: str }
+    PactError { message: str, path: None }
+  }
+
+  fn with_path(&self, path: &Path) -> PactError {
+    PactError {
+      message: self.message.clone(),
+      path: path.to_str().map(|p| p.to_string())
+    }
   }
 }
 
 impl Display for PactError {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}", self.message)
+    match &self.path {
+      Some(path) => write!(f, "{} - {}", self.message, path),
+      None => write!(f, "{}", self.message)
+    }
   }
 }
 
 impl From<reqwest::Error> for PactError {
   fn from(err: reqwest::Error) -> Self {
-    PactError { message: format!("Request failed: {}", err) }
+    PactError { message: format!("Request failed: {}", err), path: None }
   }
 }
 
 impl From<serde_json::error::Error> for PactError {
   fn from(err: serde_json::error::Error) -> Self {
-    PactError { message: format!("Failed to parse JSON body: {}", err) }
+    PactError { message: format!("Failed to parse JSON body: {}", err), path: None }
   }
 }
 
 impl From<std::io::Error> for PactError {
   fn from(err: std::io::Error) -> Self {
-    PactError { message: format!("Failed to load pact file: {}", err) }
+    PactError { message: format!("Failed to load pact file: {}", err), path: None }
   }
 }
 
@@ -179,15 +190,16 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
     sources
 }
 
-fn walkdir(dir: &Path) -> Result<Vec<Result<Pact, PactError>>, PactError> {
+fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Pact, PactError>>, PactError> {
     let mut pacts = vec![];
     debug!("Scanning {:?}", dir);
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
         if path.is_dir() {
-            walkdir(&path)?;
-        } else {
-            pacts.push(Pact::read_pact(&path).map_err(|err| PactError::from(err)))
+            walkdir(&path, ext)?;
+        } else if path.extension().is_some() && path.extension().unwrap_or_default() == ext {
+            debug!("Loading file '{:?}'", path);
+            pacts.push(Pact::read_pact(&path).map_err(|err| PactError::from(err).with_path(path.as_path())))
         }
     }
     Ok(pacts)
@@ -218,11 +230,11 @@ async fn pact_from_url(url: &String, auth: &Option<UrlAuth>, insecure_tls: bool)
   Ok(pact)
 }
 
-async fn load_pacts(sources: Vec<PactSource>, insecure_tls: bool) -> Vec<Result<Pact, PactError>> {
+async fn load_pacts(sources: Vec<PactSource>, insecure_tls: bool, ext: Option<&str>) -> Vec<Result<Pact, PactError>> {
   futures::stream::iter(sources.iter().cloned()).then(| s| async move {
     let val = match s {
       PactSource::File(ref file) => vec![Pact::read_pact(Path::new(file)).map_err(|err| PactError::from(err))],
-      PactSource::Dir(ref dir) => match walkdir(Path::new(dir)) {
+      PactSource::Dir(ref dir) => match walkdir(Path::new(dir), ext.unwrap_or("json")) {
         Ok(ref pacts) => pacts.iter().cloned().map(|res| res.map_err(|err| PactError::from(err))).collect(),
         Err(err) => vec![Err(PactError::new(format!("Could not load pacts from directory '{}' - {}", dir, err)))]
       },
@@ -270,6 +282,15 @@ async fn handle_command_args() -> Result<(), i32> {
           .number_of_values(1)
           .empty_values(false)
           .help("Directory of pact files to verify (can be repeated)"))
+      .arg(Arg::with_name("ext")
+        .short("e")
+        .long("extension")
+        .takes_value(true)
+        .use_delimiter(false)
+        .number_of_values(1)
+        .empty_values(false)
+        .requires("dir")
+        .help("File extension to use when loading from a directory (default is json)"))
       .arg(Arg::with_name("url")
           .short("u")
           .long("url")
@@ -352,7 +373,8 @@ async fn handle_command_args() -> Result<(), i32> {
       setup_logger(level);
       let sources = pact_source(matches);
 
-      let pacts = load_pacts(sources, matches.is_present("insecure-tls")).await;
+      let pacts = load_pacts(sources, matches.is_present("insecure-tls"),
+        matches.value_of("ext")).await;
       debug!("pacts = {:?}", pacts);
       if pacts.iter().any(|p| p.is_err()) {
         error!("There were errors loading the pact files.");

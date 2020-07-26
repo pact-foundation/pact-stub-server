@@ -922,7 +922,7 @@ dependencies = [
 
 [[package]]
 name = "pact-stub-server"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "base64 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.33.1 (registry+https://github.com/rust-lang/crates.io-index)",
