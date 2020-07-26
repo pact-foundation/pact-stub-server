@@ -389,8 +389,13 @@ async fn handle_command_args() -> Result<(), i32> {
         let provider_state_header_name = matches.value_of("provider-state-header-name")
             .map(|filter| String::from(filter));
         let empty_provider_states = matches.is_present("empty-provider-state");
-        let pacts = pacts.iter().cloned().map(|p| p.unwrap()).collect();
-        let server_handler = ServerHandler::new(pacts, matches.is_present("cors"),
+        let pacts = pacts.iter()
+          .map(|p| p.as_ref().unwrap())
+          .flat_map(|pact| pact.interactions.clone())
+          .collect();
+        let server_handler = ServerHandler::new(
+          pacts,
+          matches.is_present("cors"),
           matches.is_present("cors-referer"), provider_state, provider_state_header_name,
           empty_provider_states);
         tokio::task::spawn_blocking(move || {

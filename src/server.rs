@@ -1,7 +1,7 @@
 use http::{StatusCode, Error};
 use itertools::Itertools;
 use pact_matching::{self, Mismatch};
-use pact_matching::models::{Interaction, Pact, Request, Response};
+use pact_matching::models::{Interaction, Request, Response};
 use pact_matching::models::OptionalBody;
 use crate::pact_support;
 use hyper::{Body, Request as HyperRequest, Response as HyperResponse, Server};
@@ -18,7 +18,7 @@ use log::*;
 
 #[derive(Clone)]
 pub struct ServerHandler {
-    sources: Vec<Pact>,
+    sources: Vec<Interaction>,
     auto_cors: bool,
     cors_referer: bool,
     provider_state: Option<Regex>,
@@ -33,7 +33,7 @@ fn method_supports_payload(request: &Request) -> bool {
     }
 }
 
-fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool, sources: &Vec<Pact>,
+fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool, sources: &Vec<Interaction>,
                          provider_state: Option<Regex>, empty_provider_states: bool) -> Result<Response, String> {
     match &provider_state {
         Some(state) => info!("Filtering interactions by provider state regex '{}'", state),
@@ -41,14 +41,13 @@ fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool,
     }
     let match_results = sources
         .iter()
-        .flat_map(|pact| pact.interactions.clone())
         .filter(|i| match provider_state {
             Some(ref regex) => empty_provider_states && i.provider_states.is_empty() ||
               i.provider_states.iter().any(|state|
                 empty_provider_states && state.name.is_empty() || regex.is_match(state.name.as_str())),
             None => true
         })
-        .map(|i| (i.clone(), pact_matching::match_request(i.request, request.clone())))
+        .map(|i| (i.clone(), pact_matching::match_request(i.request.clone(), request.clone())))
         .filter(|&(_, ref mismatches)| mismatches.iter().all(|mismatch|{
             match mismatch {
                 &Mismatch::MethodMismatch { .. } => false,
@@ -94,7 +93,7 @@ fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool,
     }
 }
 
-fn handle_request(request: Request, auto_cors: bool, cors_referrer: bool, sources: Vec<Pact>,
+fn handle_request(request: Request, auto_cors: bool, cors_referrer: bool, sources: Vec<Interaction>,
                   provider_state: Option<Regex>, empty_provider_states: bool) -> Response {
     info! ("===> Received {}", request);
     debug!("     body: '{}'", request.body.str_value());
@@ -118,7 +117,7 @@ fn handle_request(request: Request, auto_cors: bool, cors_referrer: bool, source
 }
 
 impl ServerHandler {
-  pub fn new(sources: Vec<Pact>, auto_cors: bool, cors_referer: bool, provider_state: Option<Regex>,
+  pub fn new(sources: Vec<Interaction>, auto_cors: bool, cors_referer: bool, provider_state: Option<Regex>,
              provider_state_header_name: Option<String>, empty_provider_states: bool) ->  ServerHandler {
     ServerHandler {
       sources,
@@ -134,7 +133,7 @@ impl ServerHandler {
     let addr = ([0, 0, 0, 0], port).into();
     match Server::try_bind(&addr) {
       Ok(builder) => {
-        let server = builder.http1_keepalive(false)
+        let server = builder
           .serve(hyper::service::make_service_fn(|_: &AddrStream| {
             let inner = self.clone();
             async {
