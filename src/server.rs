@@ -40,26 +40,30 @@ fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool,
         None => ()
     }
     let match_results = sources
-        .iter()
-        .filter(|i| match provider_state {
-            Some(ref regex) => empty_provider_states && i.provider_states.is_empty() ||
-              i.provider_states.iter().any(|state|
-                empty_provider_states && state.name.is_empty() || regex.is_match(state.name.as_str())),
-            None => true
-        })
-        .map(|i| (i.clone(), pact_matching::match_request(i.request.clone(), request.clone())))
-        .filter(|&(_, ref mismatches)| mismatches.iter().all(|mismatch|{
-            match mismatch {
-                &Mismatch::MethodMismatch { .. } => false,
-                &Mismatch::PathMismatch { .. } => false,
-                &Mismatch::QueryMismatch { .. } => false,
-                &Mismatch::BodyMismatch { .. } => !(method_supports_payload(request) && request.body.is_present()),
-                _ => true
-            }
-        }))
-        .sorted_by(|a, b| Ord::cmp(&a.1.len(), &b.1.len()))
-        .map(|(i, _)| i.clone())
-        .collect::<Vec<Interaction>>();
+      .iter()
+      .filter(|i| {
+        pact_matching::match_method_result(i.request.method.clone(), request.method.clone()).is_none() &&
+          pact_matching::match_path_result(i.request.path.clone(), request.path.clone(), &i.request.matching_rules).is_none()
+      })
+      .filter(|i| match provider_state {
+          Some(ref regex) => empty_provider_states && i.provider_states.is_empty() ||
+            i.provider_states.iter().any(|state|
+              empty_provider_states && state.name.is_empty() || regex.is_match(state.name.as_str())),
+          None => true
+      })
+      .map(|i| (i.clone(), pact_matching::match_request(i.request.clone(), request.clone())))
+      .filter(|&(_, ref mismatches)| mismatches.iter().all(|mismatch|{
+          match mismatch {
+              &Mismatch::MethodMismatch { .. } => false,
+              &Mismatch::PathMismatch { .. } => false,
+              &Mismatch::QueryMismatch { .. } => false,
+              &Mismatch::BodyMismatch { .. } => !(method_supports_payload(request) && request.body.is_present()),
+              _ => true
+          }
+      }))
+      .sorted_by(|a, b| Ord::cmp(&a.1.len(), &b.1.len()))
+      .map(|(i, _)| i.clone())
+      .collect::<Vec<Interaction>>();
 
     if match_results.len() > 1 {
         warn!("Found more than one pact request for method {} and path '{}', using the first one with the least number of mismatches",
@@ -70,7 +74,7 @@ fn find_matching_request(request: &Request, auto_cors: bool, cors_referer: bool,
         Some(interaction) => Ok(pact_matching::generate_response(&interaction.response, &hashmap!{})),
         None => {
             if auto_cors && request.method.to_uppercase() == "OPTIONS" {
-                let origin = if cors_referer { 
+                let origin = if cors_referer {
                     match request.headers {
                         Some(ref h) => h.iter()
                           .find(|kv| kv.0.to_lowercase() == "referer")
