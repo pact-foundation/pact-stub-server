@@ -1,5 +1,6 @@
 # Standalone Pact Stub Server
 
+[![Build](https://github.com/uglyog/pact-stub-server/workflows/Build/badge.svg)](https://github.com/uglyog/pact-stub-server/actions?query=workflow%3ABuild)
 [![Build Status](https://travis-ci.org/uglyog/pact-stub-server.svg?branch=master)](https://travis-ci.org/uglyog/pact-stub-server)
 [![Windows Build status](https://ci.appveyor.com/api/projects/status/vigbo2qdyk9x7mo9?svg=true)](https://ci.appveyor.com/project/uglyog/pact-stub-server)
 
