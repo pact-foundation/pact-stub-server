@@ -941,6 +941,8 @@ dependencies = [
 [[package]]
 name = "pact_matching"
 version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc38c32912a5e7162e8878e61cb2785828248f6eb2968231512abe11f72b2801"
 dependencies = [
  "ansi_term 0.12.1",
  "base64",
@@ -975,6 +977,8 @@ dependencies = [
 [[package]]
 name = "pact_verifier"
 version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88b7f1f20a7aa465a395496995ed9490202d34e5b24dbc11d4bb6829f03e1103"
 dependencies = [
  "ansi_term 0.12.1",
  "async-trait",
