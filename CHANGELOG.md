@@ -1,5 +1,13 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.4.4 - option to fetch pacts from Pact broker
+
+* 0d7ab70 - fix: correct cargo manefest dependency version (Ronald Holshausen, Mon Jan 25 10:24:26 2021 +1100)
+* a5ec95d - feat: added option to fetch pacts from Pact broker (Ronald Holshausen, Sun Jan 24 18:22:48 2021 +1100)
+* 5b080b8 - fix: correct cargo manefest (Ronald Holshausen, Sun Jan 24 14:38:54 2021 +1100)
+* 457759b - chore: upgrade to Tokio 1.0 and Hyper 0.14 (Ronald Holshausen, Sun Jan 24 14:28:23 2021 +1100)
+* 9717506 - bump version to 0.4.4 (Ronald Holshausen, Sun Jul 26 12:42:57 2020 +1000)
+
 # 0.4.3 - Performance optmisation
 
 * f9515fd - fix: tests after performance optimisation (Ronald Holshausen, Sun Jul 26 12:34:11 2020 +1000)
