@@ -73,8 +73,11 @@ use clap::crate_version;
 use futures::stream::*;
 use log::*;
 use log::LevelFilter;
+use maplit::*;
 use pact_matching::models::{load_pact_from_json, Pact, PactSpecification, read_pact};
+use pact_matching::models::http_utils::HttpAuth;
 use pact_matching::s;
+use pact_verifier::pact_broker::HALClient;
 use regex::Regex;
 use serde_json::Value;
 use simplelog::{Config, SimpleLogger, TerminalMode, TermLogger};
@@ -151,45 +154,47 @@ fn regex_value(v: String) -> Result<(), String> {
     Regex::new(v.as_str()).map(|_| ()).map_err(|e| format!("'{}' is not a valid regular expression: {}", v, e) )
 }
 
-/// Type of authentication to use
-#[derive(Debug, Clone)]
-pub enum UrlAuth {
-  /// Username and Password
-  User(String),
-  /// Bearer token
-  Token(String)
-}
-
 /// Source for loading pacts
 #[derive(Debug, Clone)]
 pub enum PactSource {
-    /// Load the pact from a pact file
-    File(String),
-    /// Load all the pacts from a Directory
-    Dir(String),
-    /// Load the pact from a URL
-    URL(String, Option<UrlAuth>)
+  /// Load the pact from a pact file
+  File(String),
+  /// Load all the pacts from a Directory
+  Dir(String),
+  /// Load the pact from a URL
+  URL(String, Option<HttpAuth>),
+  /// Load all pacts from a Pact Broker
+  Broker(String, Option<HttpAuth>)
 }
 
 fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
-    let mut sources = vec![];
-    match matches.values_of("file") {
-        Some(values) => sources.extend(values.map(|v| PactSource::File(s!(v))).collect::<Vec<PactSource>>()),
-        None => ()
-    };
-    match matches.values_of("dir") {
-        Some(values) => sources.extend(values.map(|v| PactSource::Dir(s!(v))).collect::<Vec<PactSource>>()),
-        None => ()
-    };
-    match matches.values_of("url") {
-        Some(values) => sources.extend(values.map(|v| {
-          let auth = matches.value_of("user").map(|u| UrlAuth::User(u.to_string()))
-            .or(matches.value_of("token").map(|v| UrlAuth::Token(v.to_string())));
-          PactSource::URL(s!(v), auth)
-        }).collect::<Vec<PactSource>>()),
-        None => ()
-    };
-    sources
+  let mut sources = vec![];
+  if let Some(values) = matches.values_of("file") {
+    sources.extend(values.map(|v| PactSource::File(v.to_string())).collect::<Vec<PactSource>>());
+  }
+  if let Some(values) = matches.values_of("dir") {
+    sources.extend(values.map(|v| PactSource::Dir(v.to_string())).collect::<Vec<PactSource>>());
+  }
+  if let Some(values) = matches.values_of("url") {
+    sources.extend(values.map(|v| {
+      let auth = matches.value_of("user").map(|u| {
+        let mut auth = u.split(':');
+        HttpAuth::User(auth.next().unwrap().to_string(), auth.next().map(|p| p.to_string()))
+      })
+        .or(matches.value_of("token").map(|v| HttpAuth::Token(v.to_string())));
+      PactSource::URL(s!(v), auth)
+    }).collect::<Vec<PactSource>>());
+  }
+  if let Some(url) = matches.value_of("broker-url") {
+    let auth = matches.value_of("user").map(|u| {
+      let mut auth = u.split(':');
+      HttpAuth::User(auth.next().unwrap().to_string(), auth.next().map(|p| p.to_string()))
+    }).or(matches.value_of("token").map(|v| HttpAuth::Token(v.to_string())));
+    debug!("Loading all pacts from Pact Broker at {} using {} authentication", url,
+      auth.clone().map(|auth| auth.to_string()).unwrap_or("no".to_string()));
+    sources.push(PactSource::Broker(url.to_string(), auth));
+  }
+  sources
 }
 
 fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact>, PactError>>, PactError> {
@@ -210,7 +215,7 @@ fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact>, PactError>
 
 async fn pact_from_url(
   url: &String,
-  auth: &Option<UrlAuth>,
+  auth: &Option<HttpAuth>,
   insecure_tls: bool
 ) -> Result<Box<dyn Pact>, PactError> {
   let client = if insecure_tls {
@@ -223,10 +228,14 @@ async fn pact_from_url(
     reqwest::Client::builder().build()?
   };
   let mut req = client.get(url);
-  if let Some(ref u) = auth {
+  if let Some(u) = auth {
     req = match u {
-      &UrlAuth::User(ref user) => req.header("Authorization", format!("Basic {}", encode(&user))),
-      &UrlAuth::Token(ref token) => req.header("Authorization", format!("Bearer {}", token))
+      HttpAuth::User(user, password) => if let Some(pass) = password {
+        req.header("Authorization", format!("Basic {}", encode(format!("{}:{}", user, pass))))
+      } else {
+        req.header("Authorization", format!("Basic {}", encode(user)))
+      },
+      HttpAuth::Token(token) => req.header("Authorization", format!("Bearer {}", token))
     };
   }
   debug!("Executing Request to fetch pact from URL: {}", url);
@@ -249,7 +258,36 @@ async fn load_pacts(
         Ok(pacts) => pacts,
         Err(err) => vec![Err(PactError::new(format!("Could not load pacts from directory '{}' - {}", dir, err)))]
       },
-      PactSource::URL(url, auth) => vec![pact_from_url(url, auth, insecure_tls).await]
+      PactSource::URL(url, auth) => vec![pact_from_url(url, auth, insecure_tls).await],
+      PactSource::Broker(url, auth) => {
+        let client = HALClient::with_url(url, auth.clone());
+        match client.navigate("pb:latest-pact-versions", &hashmap!{}).await {
+          Ok(client) => {
+            match client.clone().iter_links("pb:pacts") {
+              Ok(links) => {
+                futures::stream::iter(links.iter().map(|link| (link.clone(), client.clone())))
+                  .then(|(link, client)| {
+                    async move {
+                      client.clone().fetch_url(&link, &hashmap!{}).await
+                        .map_err(|err| PactError::new(err.to_string()))
+                        .and_then(|json| {
+                          let pact_title = link.title.clone().unwrap_or(link.href.clone().unwrap_or_default());
+                          debug!("Found pact {}", pact_title);
+                          load_pact_from_json(link.href.clone().unwrap_or_default().as_str(), &json)
+                            .map_err(|err|
+                              PactError::new(format!("Error loading \"{}\" ({}) - {}", pact_title, link.href.unwrap_or_default(), err))
+                            )
+                        })
+                    }
+                  })
+                  .collect().await
+              },
+              Err(err) => vec![Err(PactError::new(err.to_string()))]
+            }
+          }
+          Err(err) => vec![Err(PactError::new(err.to_string()))]
+        }
+      }
     };
     futures::stream::iter(val)
   }).flatten().collect().await
@@ -261,121 +299,132 @@ async fn handle_command_args() -> Result<(), i32> {
 
   let version = format!("v{}", crate_version!());
   let app = App::new(program)
-      .version(version.as_str())
-      .about("Pact Stub Server")
-      .version_short("v")
-      .setting(AppSettings::ArgRequiredElseHelp)
-      .setting(AppSettings::ColoredHelp)
-      .arg(Arg::with_name("loglevel")
-          .short("l")
-          .long("loglevel")
-          .takes_value(true)
-          .use_delimiter(false)
-          .possible_values(&["error", "warn", "info", "debug", "trace", "none"])
-          .help("Log level (defaults to info)"))
-      .arg(Arg::with_name("file")
-          .short("f")
-          .long("file")
-          .required_unless_one(&["dir", "url"])
-          .takes_value(true)
-          .use_delimiter(false)
-          .multiple(true)
-          .number_of_values(1)
-          .empty_values(false)
-          .help("Pact file to verify (can be repeated)"))
-      .arg(Arg::with_name("dir")
-          .short("d")
-          .long("dir")
-          .required_unless_one(&["file", "url"])
-          .takes_value(true)
-          .use_delimiter(false)
-          .multiple(true)
-          .number_of_values(1)
-          .empty_values(false)
-          .help("Directory of pact files to verify (can be repeated)"))
-      .arg(Arg::with_name("ext")
-        .short("e")
-        .long("extension")
-        .takes_value(true)
-        .use_delimiter(false)
-        .number_of_values(1)
-        .empty_values(false)
-        .requires("dir")
-        .help("File extension to use when loading from a directory (default is json)"))
-      .arg(Arg::with_name("url")
-          .short("u")
-          .long("url")
-          .required_unless_one(&["file", "dir"])
-          .takes_value(true)
-          .use_delimiter(false)
-          .multiple(true)
-          .number_of_values(1)
-          .empty_values(false)
-          .help("URL of pact file to verify (can be repeated)"))
-      .arg(Arg::with_name("user")
-        .long("user")
-        .takes_value(true)
-        .use_delimiter(false)
-        .number_of_values(1)
-        .empty_values(false)
-        .conflicts_with("token")
-        .help("User and password to use when fetching pacts from URLS in user:password form"))
-      .arg(Arg::with_name("token")
-        .short("t")
-        .long("token")
-        .takes_value(true)
-        .use_delimiter(false)
-        .number_of_values(1)
-        .empty_values(false)
-        .conflicts_with("user")
-        .help("Bearer token to use when fetching pacts from URLS"))
-      .arg(Arg::with_name("port")
-          .short("p")
-          .long("port")
-          .takes_value(true)
-          .use_delimiter(false)
-          .help("Port to run on (defaults to random port assigned by the OS)")
-          .validator(integer_value))
-      .arg(Arg::with_name("cors")
-          .short("o")
-          .long("cors")
-          .takes_value(false)
-          .use_delimiter(false)
-          .help("Automatically respond to OPTIONS requests and return default CORS headers"))
-      .arg(Arg::with_name("cors-referer")
-          .long("cors-referer")
-          .takes_value(false)
-          .use_delimiter(false)
-          .requires("cors")
-          .help("Set the CORS Access-Control-Allow-Origin header to the Referer"))
-      .arg(Arg::with_name("insecure-tls")
-          .long("insecure-tls")
-          .takes_value(false)
-          .use_delimiter(false)
-          .help("Disables TLS certificate validation"))
-      .arg(Arg::with_name("provider-state")
-          .short("s")
-          .long("provider-state")
-          .takes_value(true)
-          .use_delimiter(false)
-          .number_of_values(1)
-          .empty_values(false)
-          .validator(regex_value)
-          .help("Provider state regular expression to filter the responses by"))
-      .arg(Arg::with_name("provider-state-header-name")
-          .long("provider-state-header-name")
-          .takes_value(true)
-          .use_delimiter(false)
-          .number_of_values(1)
-          .empty_values(false)
-          .help("Name of the header parameter containing the provider state to be used in case \
-          multiple matching interactions are found"))
-      .arg(Arg::with_name("empty-provider-state")
-        .long("empty-provider-state")
-        .takes_value(false)
-        .use_delimiter(false)
-        .requires("provider-state")
-        .help("Include empty provider states when filtering with --provider-state"));
+    .version(version.as_str())
+    .about("Pact Stub Server")
+    .version_short("v")
+    .setting(AppSettings::ArgRequiredElseHelp)
+    .setting(AppSettings::ColoredHelp)
+    .arg(Arg::with_name("loglevel")
+      .short("l")
+      .long("loglevel")
+      .takes_value(true)
+      .use_delimiter(false)
+      .possible_values(&["error", "warn", "info", "debug", "trace", "none"])
+      .help("Log level (defaults to info)"))
+    .arg(Arg::with_name("file")
+      .short("f")
+      .long("file")
+      .required_unless_one(&["dir", "url", "broker-url"])
+      .takes_value(true)
+      .use_delimiter(false)
+      .multiple(true)
+      .number_of_values(1)
+      .empty_values(false)
+      .help("Pact file to load (can be repeated)"))
+    .arg(Arg::with_name("dir")
+      .short("d")
+      .long("dir")
+      .required_unless_one(&["file", "url", "broker-url"])
+      .takes_value(true)
+      .use_delimiter(false)
+      .multiple(true)
+      .number_of_values(1)
+      .empty_values(false)
+      .help("Directory of pact files to load (can be repeated)"))
+    .arg(Arg::with_name("ext")
+      .short("e")
+      .long("extension")
+      .takes_value(true)
+      .use_delimiter(false)
+      .number_of_values(1)
+      .empty_values(false)
+      .requires("dir")
+      .help("File extension to use when loading from a directory (default is json)"))
+    .arg(Arg::with_name("url")
+      .short("u")
+      .long("url")
+      .required_unless_one(&["file", "dir", "broker-url"])
+      .takes_value(true)
+      .use_delimiter(false)
+      .multiple(true)
+      .number_of_values(1)
+      .empty_values(false)
+      .help("URL of pact file to fetch (can be repeated)"))
+    .arg(Arg::with_name("broker-url")
+      .short("b")
+      .long("broker-url")
+      .env("PACT_BROKER_BASE_URL")
+      .required_unless_one(&["file", "dir", "url"])
+      .takes_value(true)
+      .use_delimiter(false)
+      .multiple(false)
+      .number_of_values(1)
+      .empty_values(false)
+      .help("URL of the pact broker to fetch pacts from"))
+    .arg(Arg::with_name("user")
+      .long("user")
+      .takes_value(true)
+      .use_delimiter(false)
+      .number_of_values(1)
+      .empty_values(false)
+      .conflicts_with("token")
+      .help("User and password to use when fetching pacts from URLS or Pact Broker in user:password form"))
+    .arg(Arg::with_name("token")
+      .short("t")
+      .long("token")
+      .takes_value(true)
+      .use_delimiter(false)
+      .number_of_values(1)
+      .empty_values(false)
+      .conflicts_with("user")
+      .help("Bearer token to use when fetching pacts from URLS or Pact Broker"))
+    .arg(Arg::with_name("port")
+      .short("p")
+      .long("port")
+      .takes_value(true)
+      .use_delimiter(false)
+      .help("Port to run on (defaults to random port assigned by the OS)")
+      .validator(integer_value))
+    .arg(Arg::with_name("cors")
+      .short("o")
+      .long("cors")
+      .takes_value(false)
+      .use_delimiter(false)
+      .help("Automatically respond to OPTIONS requests and return default CORS headers"))
+    .arg(Arg::with_name("cors-referer")
+      .long("cors-referer")
+      .takes_value(false)
+      .use_delimiter(false)
+      .requires("cors")
+      .help("Set the CORS Access-Control-Allow-Origin header to the Referer"))
+    .arg(Arg::with_name("insecure-tls")
+      .long("insecure-tls")
+      .takes_value(false)
+      .use_delimiter(false)
+      .help("Disables TLS certificate validation"))
+    .arg(Arg::with_name("provider-state")
+      .short("s")
+      .long("provider-state")
+      .takes_value(true)
+      .use_delimiter(false)
+      .number_of_values(1)
+      .empty_values(false)
+      .validator(regex_value)
+      .help("Provider state regular expression to filter the responses by"))
+    .arg(Arg::with_name("provider-state-header-name")
+      .long("provider-state-header-name")
+      .takes_value(true)
+      .use_delimiter(false)
+      .number_of_values(1)
+      .empty_values(false)
+      .help("Name of the header parameter containing the provider state to be used in case \
+      multiple matching interactions are found"))
+    .arg(Arg::with_name("empty-provider-state")
+      .long("empty-provider-state")
+      .takes_value(false)
+      .use_delimiter(false)
+      .requires("provider-state")
+      .help("Include empty provider states when filtering with --provider-state"));
 
   let matches = app.get_matches_safe();
   match matches {
