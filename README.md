@@ -14,6 +14,10 @@ The stub server works by taking all the interactions (requests and responses) fr
 For each interaction, it will compare any incoming request against those defined in the pact files. If there is a match 
 (based on method, path and query parameters), it will return the response from the pact file.
 
+**Note:** The stub server was designed to supporting prototyping of mobile applications by stubbing out the
+backend servers. It will always try to return a response, even when there is not an extract match with the
+pact files.
+
 ## Command line interface
 
 The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this with out any options displays the standard help.
