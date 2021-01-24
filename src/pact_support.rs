@@ -8,6 +8,7 @@ use pact_matching::models::parse_query_string;
 use std::collections::HashMap;
 use log::*;
 use pact_matching::s;
+use pact_matching::models::content_types::TEXT;
 
 fn extract_query_string(uri: &Uri) -> Option<HashMap<String, Vec<String>>> {
     match uri.query() {
@@ -67,15 +68,16 @@ pub fn pact_response_to_hyper_response(response: &Response) -> Result<HyperRespo
     }
   }
 
-  if !response.has_header(&ACCESS_CONTROL_ALLOW_ORIGIN.as_str().into()) {
+  if !response.has_header(ACCESS_CONTROL_ALLOW_ORIGIN.as_str()) {
     res = res.header(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
   }
 
   match &response.body {
     OptionalBody::Present(ref body, content_type) => {
-      if !response.has_header(&CONTENT_TYPE.as_str().into()) {
-        let content_type = content_type.clone().unwrap_or_else(|| response.content_type());
-        res = res.header(CONTENT_TYPE, content_type);
+      if !response.has_header(CONTENT_TYPE.as_str()) {
+        let content_type = content_type.clone()
+          .unwrap_or_else(|| response.content_type().unwrap_or_else(|| TEXT.clone()));
+        res = res.header(CONTENT_TYPE, content_type.to_string());
       }
       res.body(Body::from(body.clone()))
     },

@@ -60,24 +60,26 @@
 
 #![warn(missing_docs)]
 
-use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
-use log::LevelFilter;
-use pact_matching::models::{Pact, PactSpecification};
-use simplelog::{Config, SimpleLogger, TermLogger, TerminalMode};
 use std::env;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
+
 use base64::encode;
-use regex::Regex;
-use std::error::Error;
-use std::fmt::Display;
-use serde::export::Formatter;
-use futures::stream::*;
-use crate::server::ServerHandler;
-use pact_matching::s;
-use log::*;
+use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
 use clap::crate_version;
+use futures::stream::*;
+use log::*;
+use log::LevelFilter;
+use pact_matching::models::{load_pact_from_json, Pact, PactSpecification, read_pact};
+use pact_matching::s;
+use regex::Regex;
+use serde_json::Value;
+use simplelog::{Config, SimpleLogger, TerminalMode, TermLogger};
+
+use crate::server::ServerHandler;
 
 mod pact_support;
 mod server;
@@ -190,22 +192,27 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
     sources
 }
 
-fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Pact, PactError>>, PactError> {
-    let mut pacts = vec![];
-    debug!("Scanning {:?}", dir);
-    for entry in fs::read_dir(dir)? {
-        let path = entry?.path();
-        if path.is_dir() {
-            walkdir(&path, ext)?;
-        } else if path.extension().is_some() && path.extension().unwrap_or_default() == ext {
-            debug!("Loading file '{:?}'", path);
-            pacts.push(Pact::read_pact(&path).map_err(|err| PactError::from(err).with_path(path.as_path())))
-        }
+fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact>, PactError>>, PactError> {
+  let mut pacts = vec![];
+  debug!("Scanning {:?}", dir);
+  for entry in fs::read_dir(dir)? {
+    let path = entry?.path();
+    if path.is_dir() {
+      walkdir(&path, ext)?;
+    } else if path.extension().is_some() && path.extension().unwrap_or_default() == ext {
+      debug!("Loading file '{:?}'", path);
+      pacts.push(read_pact(&path)
+        .map_err(|err| PactError::from(err).with_path(path.as_path())))
     }
-    Ok(pacts)
+  }
+  Ok(pacts)
 }
 
-async fn pact_from_url(url: &String, auth: &Option<UrlAuth>, insecure_tls: bool) -> Result<Pact, PactError> {
+async fn pact_from_url(
+  url: &String,
+  auth: &Option<UrlAuth>,
+  insecure_tls: bool
+) -> Result<Box<dyn Pact>, PactError> {
   let client = if insecure_tls {
     warn!("Disabling TLS certificate validation");
     reqwest::Client::builder()
@@ -223,24 +230,28 @@ async fn pact_from_url(url: &String, auth: &Option<UrlAuth>, insecure_tls: bool)
     };
   }
   debug!("Executing Request to fetch pact from URL: {}", url);
-  let res = req.send().await?.text().await?;
-  let pact_json = serde_json::from_str(&res)?;
-  let pact = Pact::from_json(&url, &pact_json);
-  debug!("Fetched Pact: {:?}", pact);
-  Ok(pact)
+  let pact_json: Value = req.send().await?.json().await?;
+  debug!("Fetched Pact: {}", pact_json);
+  load_pact_from_json(url, &pact_json).map_err(|err| PactError::new(err))
 }
 
-async fn load_pacts(sources: Vec<PactSource>, insecure_tls: bool, ext: Option<&str>) -> Vec<Result<Pact, PactError>> {
+async fn load_pacts(
+  sources: Vec<PactSource>,
+  insecure_tls: bool,
+  ext: Option<&str>
+) -> Vec<Result<Box<dyn Pact>, PactError>> {
   futures::stream::iter(sources.iter().cloned()).then(| s| async move {
-    let val = match s {
-      PactSource::File(ref file) => vec![Pact::read_pact(Path::new(file)).map_err(|err| PactError::from(err))],
-      PactSource::Dir(ref dir) => match walkdir(Path::new(dir), ext.unwrap_or("json")) {
-        Ok(ref pacts) => pacts.iter().cloned().map(|res| res.map_err(|err| PactError::from(err))).collect(),
+    let val = match &s {
+      PactSource::File(file) => vec![
+        read_pact(Path::new(file)).map_err(|err| PactError::from(err))
+      ],
+      PactSource::Dir(dir) => match walkdir(Path::new(dir), ext.unwrap_or("json")) {
+        Ok(pacts) => pacts,
         Err(err) => vec![Err(PactError::new(format!("Could not load pacts from directory '{}' - {}", dir, err)))]
       },
-      PactSource::URL(ref url, ref auth) => vec![pact_from_url(url, auth, insecure_tls).await]
+      PactSource::URL(url, auth) => vec![pact_from_url(url, auth, insecure_tls).await]
     };
-    futures::stream::iter(val.clone())
+    futures::stream::iter(val)
   }).flatten().collect().await
 }
 
@@ -375,10 +386,14 @@ async fn handle_command_args() -> Result<(), i32> {
 
       let pacts = load_pacts(sources, matches.is_present("insecure-tls"),
         matches.value_of("ext")).await;
-      debug!("pacts = {:?}", pacts);
       if pacts.iter().any(|p| p.is_err()) {
         error!("There were errors loading the pact files.");
-        for error in pacts.iter().filter(|p| p.is_err()).cloned().map(|e| e.unwrap_err()) {
+        for error in pacts.iter()
+          .filter(|p| p.is_err())
+          .map(|e| match e {
+            Err(err) => err.clone(),
+            _ => panic!("Internal Code Error - was expecting an error but was not")
+          }) {
           error!("  - {}", error);
         }
         Err(3)
@@ -391,12 +406,17 @@ async fn handle_command_args() -> Result<(), i32> {
         let empty_provider_states = matches.is_present("empty-provider-state");
         let pacts = pacts.iter()
           .map(|p| p.as_ref().unwrap())
-          .flat_map(|pact| pact.interactions.clone())
+          .flat_map(|pact| pact.interactions())
+          .map(|interaction| interaction.thread_safe())
           .collect();
+        let auto_cors = matches.is_present("cors");
+        let referer = matches.is_present("cors-referer");
         let server_handler = ServerHandler::new(
           pacts,
-          matches.is_present("cors"),
-          matches.is_present("cors-referer"), provider_state, provider_state_header_name,
+          auto_cors,
+          referer,
+          provider_state,
+          provider_state_header_name,
           empty_provider_states);
         tokio::task::spawn_blocking(move || {
           server_handler.start_server(port)

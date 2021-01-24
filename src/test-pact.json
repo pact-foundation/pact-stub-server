@@ -1,0 +1,163 @@
+{
+  "provider": {
+      "name": "test-service"
+  },
+  "consumer": {
+      "name": "test-service"
+  },
+  "interactions": [
+      {
+          "description": "request with ID in path",
+          "request": {
+              "method": "POST",
+              "path": "/api/applications/123456789",
+              "headers": {
+                  "X-App-Registration-Key": "Ld61vMw2jKLBNClekKCkSSshETpX0pUl4S0YpJwPvWBpO4sB",
+                  "Content-Type": "application/json"
+              },
+              "body": {
+                  "description": "string",
+                  "applicationName": "fservice"
+              },
+              "matchingRules": {
+                  "body": {
+                      "$.description": {
+                          "matchers": [
+                              {
+                                  "match": "type"
+                              }
+                          ],
+                          "combine": "AND"
+                      }
+                  },
+                  "path": {
+                      "matchers": [
+                          {
+                              "match": "regex",
+                              "regex": "/api/applications/\\d+"
+                          }
+                      ]
+                  }
+              },
+              "generators": {
+                  "body": {
+                      "$.description": {
+                          "type": "RandomString",
+                          "size": 20
+                      }
+                  }
+              }
+          },
+          "response": {
+              "status": 200,
+              "headers": {
+                  "Content-Type": "application/json; charset=UTF-8"
+              },
+              "body": {
+                  "clientId": "string",
+                  "description": "abc",
+                  "clientSecret": "string",
+                  "id": 1234567890,
+                  "applicationName": "fservice"
+              },
+              "matchingRules": {
+                  "body": {
+                      "$.id": {
+                          "matchers": [
+                              {
+                                  "match": "type"
+                              }
+                          ],
+                          "combine": "AND"
+                      },
+                      "$.clientId": {
+                          "matchers": [
+                              {
+                                  "match": "type"
+                              }
+                          ],
+                          "combine": "AND"
+                      },
+                      "$.clientSecret": {
+                          "matchers": [
+                              {
+                                  "match": "type"
+                              }
+                          ],
+                          "combine": "AND"
+                      }
+                  },
+                  "header": {
+                      "Content-Type": {
+                          "matchers": [
+                              {
+                                  "match": "regex",
+                                  "regex": "application/json;\\s?charset=(utf|UTF)-8"
+                              }
+                          ],
+                          "combine": "AND"
+                      }
+                  }
+              },
+              "generators": {
+                  "body": {
+                      "$.id": {
+                          "type": "RandomInt",
+                          "min": 0,
+                          "max": 2147483647
+                      },
+                      "$.clientId": {
+                          "type": "RandomString",
+                          "size": 20
+                      },
+                      "$.clientSecret": {
+                          "type": "RandomString",
+                          "size": 20
+                      }
+                  }
+              }
+          },
+          "providerStates": [
+              {
+                  "name": "There is a request to register an application"
+              }
+          ]
+      },
+      {
+          "description": "state change path",
+          "request": {
+              "method": "POST",
+              "path": "/state-change/",
+              "headers": {
+                  "Content-Type": "application/json"
+              }
+          },
+          "response": {
+              "status": 200,
+              "headers": {
+                  "Content-Type": "application/json; charset=UTF-8"
+              },
+              "body": {
+                  "id": 1234567890
+              },
+              "generators": {
+                  "body": {
+                      "$.id": {
+                          "type": "RandomInt",
+                          "min": 0,
+                          "max": 2147483647
+                      }
+                  }
+              }
+          }
+      }
+  ],
+  "metadata": {
+      "pactSpecification": {
+          "version": "3.0.0"
+      },
+      "pact-jvm": {
+          "version": "3.5.21"
+      }
+  }
+}
