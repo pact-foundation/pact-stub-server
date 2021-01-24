@@ -20,25 +20,32 @@ pact files.
 
 ## Command line interface
 
-The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this with out any options displays the standard help.
+The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this without any options displays the standard help.
 
 ```console
-pact-stub-server v0.3.2
+pact-stub-server v0.4.4
 Pact Stub Server
 
 USAGE:
-    pact-stub-server [FLAGS] [OPTIONS] --dir <dir>... --file <file>... --url <url>...
+    pact-stub-server [FLAGS] [OPTIONS] --broker-url <broker-url> --dir <dir>... --file <file>... --url <url>...
 
 FLAGS:
-    -o, --cors            Automatically respond to OPTIONS requests and return default CORS headers
-        --cors-referer    Set the CORS Access-Control-Allow-Origin header to the Referer
-    -h, --help            Prints help information
-        --insecure-tls    Disables TLS certificate validation
-    -v, --version         Prints version information
+    -o, --cors                    Automatically respond to OPTIONS requests and return default CORS headers
+        --cors-referer            Set the CORS Access-Control-Allow-Origin header to the Referer
+        --empty-provider-state    Include empty provider states when filtering with --provider-state
+    -h, --help                    Prints help information
+        --insecure-tls            Disables TLS certificate validation
+    -v, --version                 Prints version information
 
 OPTIONS:
-    -d, --dir <dir>...                                               Directory of pact files to verify (can be repeated)
-    -f, --file <file>...                                             Pact file to verify (can be repeated)
+    -b, --broker-url <broker-url>
+            URL of the pact broker to fetch pacts from [env: PACT_BROKER_BASE_URL=]
+
+    -d, --dir <dir>...                                               Directory of pact files to load (can be repeated)
+    -e, --extension <ext>
+            File extension to use when loading from a directory (default is json)
+
+    -f, --file <file>...                                             Pact file to load (can be repeated)
     -l, --loglevel <loglevel>
             Log level (defaults to info) [possible values: error, warn, info, debug,
             trace, none]
@@ -51,10 +58,13 @@ OPTIONS:
         --provider-state-header-name <provider-state-header-name>
             Name of the header parameter containing the provider state to be used in case multiple matching interactions
             are found
-    -t, --token <token>                                              Bearer token to use when fetching pacts from URLS
-    -u, --url <url>...                                               URL of pact file to verify (can be repeated)
+    -t, --token <token>
+            Bearer token to use when fetching pacts from URLS or Pact Broker
+
+    -u, --url <url>...                                               URL of pact file to fetch (can be repeated)
         --user <user>
-            User and password to use when fetching pacts from URLS in user:password form
+            User and password to use when fetching pacts from URLS or Pact Broker in user:password form
+
 ```
 
 ## Options
@@ -78,8 +88,9 @@ You can specify the pacts to verify with the following options. They can be repe
 | `-f, --file <file>` | File | Loads a pact from the given file |
 | `-u, --url <url>` | URL | Loads a pact from a URL resource |
 | `-d, --dir <dir>` | Directory | Loads all the pacts from the given directory |
+| `-b, --broker-url <url>` | URL | Loads all the latest pacts from the Pact Broker |
 
-*Note:* For URLs that are authenticated, you can use the `--user` option to set the username and password or the
+*Note:* For URLs and Pact Brokers that are authenticated, you can use the `--user` option to set the username and password or the
 `--token` to use a bearer token.
 
 #### Disabling TLS certificate validation
