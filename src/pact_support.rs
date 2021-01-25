@@ -27,7 +27,6 @@ fn extract_headers(headers: &HeaderMap<HeaderValue>) -> Option<HashMap<String, V
             .map(|v| v.to_string())
             .map_err(|err| {
               warn!("Failed to parse HTTP header value: {}", err);
-              ()
             })
           ).collect();
         (name.as_str().into(), parsed_vals.iter().cloned()
@@ -68,16 +67,18 @@ pub fn pact_response_to_hyper_response(response: &Response) -> Result<HyperRespo
     }
   }
 
-  if !response.has_header(ACCESS_CONTROL_ALLOW_ORIGIN.as_str()) {
-    res = res.header(ACCESS_CONTROL_ALLOW_ORIGIN, "*");
+  let allow_origin = ACCESS_CONTROL_ALLOW_ORIGIN;
+  if !response.has_header(allow_origin.as_str()) {
+    res = res.header(allow_origin, "*");
   }
 
   match &response.body {
     OptionalBody::Present(ref body, content_type) => {
-      if !response.has_header(CONTENT_TYPE.as_str()) {
+      let content_type_header = CONTENT_TYPE;
+      if !response.has_header(content_type_header.as_str()) {
         let content_type = content_type.clone()
           .unwrap_or_else(|| response.content_type().unwrap_or_else(|| TEXT.clone()));
-        res = res.header(CONTENT_TYPE, content_type.to_string());
+        res = res.header(content_type_header, content_type.to_string());
       }
       res.body(Body::from(body.clone()))
     },

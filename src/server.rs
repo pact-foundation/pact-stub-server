@@ -84,7 +84,7 @@ impl Service<HyperRequest<Body>> for ServerHandler {
   }
 
   fn call(&mut self, req: HyperRequest<Body>) -> Self::Future {
-    let auto_cors = self.auto_cors.clone();
+    let auto_cors = self.auto_cors;
     let cors_referrer = self.cors_referer;
     let sources = self.sources.clone();
     let provider_state = self.provider_state.clone();
@@ -126,10 +126,7 @@ impl Service<HyperRequest<Body>> for ServerHandler {
 }
 
 fn method_supports_payload(request: &Request) -> bool {
-  match request.method.to_uppercase().as_str() {
-    "POST" | "PUT" | "PATCH" => true,
-    _ => false
-  }
+  matches!(request.method.to_uppercase().as_str(), "POST" | "PUT" | "PATCH")
 }
 
 fn find_matching_request(
@@ -166,10 +163,10 @@ fn find_matching_request(
     .filter(|(_, mismatches)| {
       mismatches.iter().all(|mismatch|{
         match mismatch {
-          &Mismatch::MethodMismatch { .. } => false,
-          &Mismatch::PathMismatch { .. } => false,
-          &Mismatch::QueryMismatch { .. } => false,
-          &Mismatch::BodyMismatch { .. } => !(method_supports_payload(request) && request.body.is_present()),
+          Mismatch::MethodMismatch { .. } => false,
+          Mismatch::PathMismatch { .. } => false,
+          Mismatch::QueryMismatch { .. } => false,
+          Mismatch::BodyMismatch { .. } => !(method_supports_payload(request) && request.body.is_present()),
           _ => true
         }
       })
@@ -190,7 +187,7 @@ fn find_matching_request(
           match request.headers {
             Some(ref h) => h.iter()
               .find(|kv| kv.0.to_lowercase() == "referer")
-              .map(|kv| kv.1.clone().join(", ")).unwrap_or("*".to_string()),
+              .map(|kv| kv.1.clone().join(", ")).unwrap_or_else(|| "*".to_string()),
             None => "*".to_string()
           }
         } else { "*".to_string() };

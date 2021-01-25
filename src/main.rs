@@ -181,7 +181,7 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
         let mut auth = u.split(':');
         HttpAuth::User(auth.next().unwrap().to_string(), auth.next().map(|p| p.to_string()))
       })
-        .or(matches.value_of("token").map(|v| HttpAuth::Token(v.to_string())));
+        .or_else(|| matches.value_of("token").map(|v| HttpAuth::Token(v.to_string())));
       PactSource::URL(s!(v), auth)
     }).collect::<Vec<PactSource>>());
   }
@@ -189,9 +189,9 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
     let auth = matches.value_of("user").map(|u| {
       let mut auth = u.split(':');
       HttpAuth::User(auth.next().unwrap().to_string(), auth.next().map(|p| p.to_string()))
-    }).or(matches.value_of("token").map(|v| HttpAuth::Token(v.to_string())));
+    }).or_else(|| matches.value_of("token").map(|v| HttpAuth::Token(v.to_string())));
     debug!("Loading all pacts from Pact Broker at {} using {} authentication", url,
-      auth.clone().map(|auth| auth.to_string()).unwrap_or("no".to_string()));
+      auth.clone().map(|auth| auth.to_string()).unwrap_or_else(|| "no".to_string()));
     sources.push(PactSource::Broker(url.to_string(), auth));
   }
   sources
@@ -214,7 +214,7 @@ fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact>, PactError>
 }
 
 async fn pact_from_url(
-  url: &String,
+  url: &str,
   auth: &Option<HttpAuth>,
   insecure_tls: bool
 ) -> Result<Box<dyn Pact>, PactError> {
@@ -241,7 +241,7 @@ async fn pact_from_url(
   debug!("Executing Request to fetch pact from URL: {}", url);
   let pact_json: Value = req.send().await?.json().await?;
   debug!("Fetched Pact: {}", pact_json);
-  load_pact_from_json(url, &pact_json).map_err(|err| PactError::new(err))
+  load_pact_from_json(url, &pact_json).map_err(PactError::new)
 }
 
 async fn load_pacts(
@@ -252,7 +252,7 @@ async fn load_pacts(
   futures::stream::iter(sources.iter().cloned()).then(| s| async move {
     let val = match &s {
       PactSource::File(file) => vec![
-        read_pact(Path::new(file)).map_err(|err| PactError::from(err))
+        read_pact(Path::new(file)).map_err(PactError::from)
       ],
       PactSource::Dir(dir) => match walkdir(Path::new(dir), ext.unwrap_or("json")) {
         Ok(pacts) => pacts,
@@ -271,7 +271,7 @@ async fn load_pacts(
                       client.clone().fetch_url(&link, &hashmap!{}).await
                         .map_err(|err| PactError::new(err.to_string()))
                         .and_then(|json| {
-                          let pact_title = link.title.clone().unwrap_or(link.href.clone().unwrap_or_default());
+                          let pact_title = link.title.clone().unwrap_or_else(|| link.href.clone().unwrap_or_default());
                           debug!("Found pact {}", pact_title);
                           load_pact_from_json(link.href.clone().unwrap_or_default().as_str(), &json)
                             .map_err(|err|
@@ -451,7 +451,7 @@ async fn handle_command_args() -> Result<(), i32> {
         let provider_state = matches.value_of("provider-state")
             .map(|filter| Regex::new(filter).unwrap());
         let provider_state_header_name = matches.value_of("provider-state-header-name")
-            .map(|filter| String::from(filter));
+            .map(String::from);
         let empty_provider_states = matches.is_present("empty-provider-state");
         let pacts = pacts.iter()
           .map(|p| p.as_ref().unwrap())
@@ -490,14 +490,13 @@ async fn handle_command_args() -> Result<(), i32> {
 }
 
 fn setup_logger(level: &str) {
-    let log_level = match level {
-        "none" => LevelFilter::Off,
-        _ => LevelFilter::from_str(level).unwrap()
-    };
-    match TermLogger::init(log_level, Config::default(), TerminalMode::Mixed) {
-        Err(_) => SimpleLogger::init(log_level, Config::default()).unwrap_or(()),
-        Ok(_) => ()
-    }
+  let log_level = match level {
+    "none" => LevelFilter::Off,
+    _ => LevelFilter::from_str(level).unwrap()
+  };
+  if TermLogger::init(log_level, Config::default(), TerminalMode::Mixed).is_err() {
+    SimpleLogger::init(log_level, Config::default()).unwrap_or_default();
+  }
 }
 
 #[cfg(test)]
