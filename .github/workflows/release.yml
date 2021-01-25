@@ -1,0 +1,39 @@
+name: Release workflow
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-release:
+    runs-on: ${{ matrix.operating-system }}
+    strategy:
+      matrix:
+        operating-system: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install stable Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+      - name: Install LLVM
+        run: choco install -y llvm
+        if: runner.os == 'Windows'
+      - if: runner.os == 'Linux'
+        run: ./scripts/scripts/release-linux.sh
+      - if: runner.os == 'Windows'
+        run: ./release-win.sh
+        shell: bash
+      - if: runner.os == 'macOS'
+        run: ./scripts/release-osx.sh
+        shell: bash
+      - name: Upload Release Assets
+        id: upload-release-asset
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/artifacts/*
+          file_glob: true
+          tag: ${{ github.ref }}
