@@ -4,4 +4,4 @@ set -e
 
 mkdir -p target/artifacts
 cargo build --release
-gzip -c target/release/pact_verifier_cli.exe > target/artifacts/pact_verifier_cli-windows-x86_64.exe.gz
+gzip -c target/release/pact-stub-server.exe > target/artifacts/pact-stub-server-windows-x86_64.exe.gz
