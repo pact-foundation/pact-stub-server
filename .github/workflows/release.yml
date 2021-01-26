@@ -24,7 +24,7 @@ jobs:
       - if: runner.os == 'Linux'
         run: ./scripts/release-linux.sh
       - if: runner.os == 'Windows'
-        run: ./release-win.sh
+        run: ./scripts/release-win.sh
         shell: bash
       - if: runner.os == 'macOS'
         run: ./scripts/release-osx.sh
