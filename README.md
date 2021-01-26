@@ -111,3 +111,19 @@ The running server can be controlled with the following options:
 | Option | Description |
 |--------|-------------|
 | `-p, --port <port>` | The port to bind to. If not specified, a random port will be allocated by the operating system. |
+
+## Running with docker
+
+A docker image is published to `pactfoundation/pact-stub-server`.
+
+Example of using it:
+
+```
+# Create a Stub API
+docker pull pactfoundation/pact-stub-server
+docker run -t -p 8080:8080 -v "$(pwd)/pacts/:/app/pacts" pactfoundation/pact-stub-server -p 8080 -d pacts
+
+# Test your stub endpoints
+curl -v $(docker-machine ip $(docker-machine active)):8080/bazbat
+curl -v $(docker-machine ip $(docker-machine active)):8080/foobar
+```
