@@ -22,7 +22,7 @@ jobs:
         run: choco install -y llvm
         if: runner.os == 'Windows'
       - if: runner.os == 'Linux'
-        run: ./scripts/scripts/release-linux.sh
+        run: ./scripts/release-linux.sh
       - if: runner.os == 'Windows'
         run: ./release-win.sh
         shell: bash
