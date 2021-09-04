@@ -1,4 +1,4 @@
-FROM debian:bullseye-slim
+FROM debian:11-slim
 ARG VERSION=0.4.4
 WORKDIR /app
 RUN apt-get update && apt-get install -y curl openssl && \
