@@ -75,7 +75,7 @@ use log::*;
 use log::LevelFilter;
 use maplit::*;
 use pact_matching::models::{load_pact_from_json, Pact, PactSpecification, read_pact};
-use pact_matching::models::http_utils::HttpAuth;
+use pact_models::http_utils::HttpAuth;
 use pact_matching::s;
 use pact_verifier::pact_broker::HALClient;
 use regex::Regex;
@@ -235,7 +235,8 @@ async fn pact_from_url(
       } else {
         req.header("Authorization", format!("Basic {}", encode(user)))
       },
-      HttpAuth::Token(token) => req.header("Authorization", format!("Bearer {}", token))
+      HttpAuth::Token(token) => req.header("Authorization", format!("Bearer {}", token)),
+     _ => req.header("Authorization", "undefined"),
     };
   }
   debug!("Executing Request to fetch pact from URL: {}", url);
