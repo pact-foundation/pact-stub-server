@@ -1,7 +1,7 @@
 [package]
 name = "pact-stub-server"
 version = "0.4.5"
-edition = "2018"
+edition = "2021"
 authors = ["Ronald Holshausen <uglyog@gmail.com>"]
 description = "Standalone pact stub server"
 homepage = "http://www.pact.io"
