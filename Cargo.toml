@@ -24,15 +24,13 @@ simplelog = "0.9.0"
 log = "0.4.8"
 maplit = "1.0.2"
 itertools = "0.10.0"
-native-tls = "0.2"
-hyper-tls = "0.5.0"
 hyper = { version = "0.14", features = ["full"] }
 http = "0.2.0"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 base64 = "0.13.0"
 regex = "1.4.3"
-reqwest = { version = "0.11", features = ["json", "native-tls"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 tower-service = "0.3.0"
 
 [dev-dependencies]

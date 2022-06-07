@@ -221,7 +221,6 @@ async fn pact_from_url(
   let client = if insecure_tls {
     warn!("Disabling TLS certificate validation");
     reqwest::Client::builder()
-      .danger_accept_invalid_hostnames(true)
       .danger_accept_invalid_certs(true)
       .build()?
   } else {
