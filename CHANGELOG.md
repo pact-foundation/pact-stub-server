@@ -1,5 +1,26 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.5.0 - Fixes + upgrade to V4 Pact
+
+* 2abfdcb - chore: update readme (Ronald Holshausen, Wed Jun 8 15:37:22 2022 +1000)
+* 4004db6 - chore: fix failing test #46 (Ronald Holshausen, Wed Jun 8 15:23:13 2022 +1000)
+* baa620a - feat: add filters for consumer and provider names #46 (Ronald Holshausen, Wed Jun 8 15:21:38 2022 +1000)
+* 7278b8f - chore: Upgrade clap to 3.0.x (Ronald Holshausen, Wed Jun 8 13:52:10 2022 +1000)
+* 5dab424 - chore: Convert logging to the tracing crate (Ronald Holshausen, Wed Jun 8 11:46:55 2022 +1000)
+* e193558 - feat: Upgrade all Pact crates to support V4 and async (Ronald Holshausen, Wed Jun 8 11:28:57 2022 +1000)
+* da9d7ab - chore: bump minor version (Ronald Holshausen, Tue Jun 7 13:37:54 2022 +1000)
+* 7c84b7e - chore: Upgrade all dependant crates (Ronald Holshausen, Tue Jun 7 13:34:48 2022 +1000)
+* 4150660 - fix: remove linked openssl from application binary #47 (Ronald Holshausen, Tue Jun 7 13:33:46 2022 +1000)
+* 7333efe - chore: upgrade project to Rust 2021 (Ronald Holshausen, Wed Jan 5 16:07:13 2022 +1100)
+* 69722f2 - Merge pull request #45 from counterbeing/master (Ronald Holshausen, Mon Nov 22 15:43:53 2021 +1100)
+* b0789ee - builds successfully on arm based m1 mac (Cory Logan, Sat Nov 20 11:55:02 2021 -0800)
+* b24ee5a - fix: docker/Dockerfile to reduce vulnerabilities (snyk-bot, Sat Sep 4 03:57:21 2021 +0000)
+* f4e871f - Add rustfmt configuration (Jorge Ortiz-Fuentes, Tue Apr 13 13:07:33 2021 +0200)
+* 6ab7cf4 - Revert "Revert "bump version to 0.4.5"" (Ronald Holshausen, Wed Jan 27 15:18:56 2021 +1100)
+* 38e041c - chore: update readme (Ronald Holshausen, Tue Jan 26 13:06:55 2021 +1100)
+* 25a2a64 - chore: add tag to docker build hook (Ronald Holshausen, Tue Jan 26 12:25:45 2021 +1100)
+* 50b2b6f - chore: add docker build (Ronald Holshausen, Tue Jan 26 12:18:57 2021 +1100)
+
 # 0.4.4 - option to fetch pacts from Pact broker
 
 * 0d7ab70 - fix: correct cargo manefest dependency version (Ronald Holshausen, Mon Jan 25 10:24:26 2021 +1100)
