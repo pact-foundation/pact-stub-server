@@ -4,11 +4,11 @@
 [![Windows Build status](https://ci.appveyor.com/api/projects/status/vigbo2qdyk9x7mo9?svg=true)](https://ci.appveyor.com/project/uglyog/pact-stub-server)
 
 This project provides a server that can generate responses based on pact files. It is a single executable binary. 
-It implements the [V3 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-3).
+It implements the [V4 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-4).
 
 [Docker Image](https://hub.docker.com/r/pactfoundation/pact-stub-server)
 
-[Online rust docs](https://docs.rs/crate/pact-stub-server/0.2.2)
+[Online rust docs](https://docs.rs/crate/pact-stub-server)
 
 The stub server works by taking all the interactions (requests and responses) from a number of pact files. 
 For each interaction, it will compare any incoming request against those defined in the pact files. If there is a match 
@@ -23,48 +23,71 @@ pact files.
 The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this without any options displays the standard help.
 
 ```console
-pact-stub-server v0.4.4
+./pact-stub-server v0.5.0
 Pact Stub Server
 
 USAGE:
-    pact-stub-server [FLAGS] [OPTIONS] --broker-url <broker-url> --dir <dir>... --file <file>... --url <url>...
-
-FLAGS:
-    -o, --cors                    Automatically respond to OPTIONS requests and return default CORS headers
-        --cors-referer            Set the CORS Access-Control-Allow-Origin header to the Referer
-        --empty-provider-state    Include empty provider states when filtering with --provider-state
-    -h, --help                    Prints help information
-        --insecure-tls            Disables TLS certificate validation
-    -v, --version                 Prints version information
+    pact-stub-server [OPTIONS]
 
 OPTIONS:
     -b, --broker-url <broker-url>
             URL of the pact broker to fetch pacts from [env: PACT_BROKER_BASE_URL=]
 
-    -d, --dir <dir>...                                               Directory of pact files to load (can be repeated)
+        --consumer-names <consumer-names>...
+            Consumer names to use to filter the Pacts fetched from the Pact broker
+
+        --cors-referer
+            Set the CORS Access-Control-Allow-Origin header to the Referer
+
+    -d, --dir <dir>
+            Directory of pact files to load (can be repeated)
+
     -e, --extension <ext>
             File extension to use when loading from a directory (default is json)
 
-    -f, --file <file>...                                             Pact file to load (can be repeated)
+        --empty-provider-state
+            Include empty provider states when filtering with --provider-state
+
+    -f, --file <file>
+            Pact file to load (can be repeated)
+
+    -h, --help
+            Print help information
+
+        --insecure-tls
+            Disables TLS certificate validation
+
     -l, --loglevel <loglevel>
-            Log level (defaults to info) [possible values: error, warn, info, debug,
-            trace, none]
+            Log level (defaults to info) [possible values: error, warn, info, debug, trace, none]
+
+    -o, --cors
+            Automatically respond to OPTIONS requests and return default CORS headers
+
     -p, --port <port>
             Port to run on (defaults to random port assigned by the OS)
+
+        --provider-names <provider-names>...
+            Provider names to use to filter the Pacts fetched from the Pact broker
+
+        --provider-state-header-name <provider-state-header-name>
+            Name of the header parameter containing the provider state to be used in case multiple
+            matching interactions are found
 
     -s, --provider-state <provider-state>
             Provider state regular expression to filter the responses by
 
-        --provider-state-header-name <provider-state-header-name>
-            Name of the header parameter containing the provider state to be used in case multiple matching interactions
-            are found
     -t, --token <token>
             Bearer token to use when fetching pacts from URLS or Pact Broker
 
-    -u, --url <url>...                                               URL of pact file to fetch (can be repeated)
-        --user <user>
-            User and password to use when fetching pacts from URLS or Pact Broker in user:password form
+    -u, --url <url>
+            URL of pact file to fetch (can be repeated)
 
+        --user <user>
+            User and password to use when fetching pacts from URLS or Pact Broker in user:password
+            form
+
+    -v, --version
+            Print version information
 ```
 
 ## Options
@@ -103,6 +126,18 @@ certificates.
 
 You can filter the interactions by provider state by supplying the `--provider-state` option. This takes a regular
 expression that is applied to all interactions before the requests are matched.
+
+### Filtering interactions by consumer and provider name (Pact Broker)
+
+For Pacts fetched from a Pact broker, you can filter the Pacts by the consumer and/or provider names using: 
+
+```
+ --consumer-names <consumer-names>...
+            Consumer names to use to filter the Pacts fetched from the Pact broker
+            
+ --provider-names <provider-names>...
+            Provider names to use to filter the Pacts fetched from the Pact broker
+```
 
 ### Server Options
 

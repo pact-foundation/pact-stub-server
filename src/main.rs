@@ -1,6 +1,6 @@
 //! # Standalone Pact Stub Server
 //!
-//! This project provides a server that can generate responses based on pact files. It is a single executable binary. It implements the [V2 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-2).
+//! This project provides a server that can generate responses based on pact files. It is a single executable binary. It implements the [V4 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-4).
 //!
 //! [Online rust docs](https://docs.rs/pact-stub-server/)
 //!
@@ -11,26 +11,71 @@
 //! The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this with out any options displays the standard help.
 //!
 //! ```console,ignore
-//! pact-stub-server v0.0.2
+//! pact-stub-server v0.5.0
 //! Pact Stub Server
 //!
 //! USAGE:
-//!     pact-stub-server [OPTIONS] --file <file> --dir <dir> --url <url>
-//!
-//! FLAGS:
-//!     -h, --help       Prints help information
-//!     -v, --version    Prints version information
+//!     pact-stub-server [OPTIONS]
 //!
 //! OPTIONS:
-//!     -d, --dir <dir>              Directory of pact files to verify (can be repeated)
-//!     -f, --file <file>            Pact file to verify (can be repeated)
-//!     -l, --loglevel <loglevel>    Log level (defaults to info) [values: error, warn, info, debug, trace, none]
-//!     -p, --port <port>            Port to run on (defaults to random port assigned by the OS)
-//!     -s, --provider-state <provider-state>    Provider state regular expression to filter the responses by
-//!         --provider-state-header-name <name>  Name of the header parameter containing the
-//! provider state to be used in case multiple matching interactions are found
-//!     -u, --url <url>              URL of pact file to verify (can be repeated)
+//!     -b, --broker-url <broker-url>
+//!             URL of the pact broker to fetch pacts from [env: PACT_BROKER_BASE_URL=]
 //!
+//!         --consumer-names <consumer-names>...
+//!             Consumer names to use to filter the Pacts fetched from the Pact broker
+//!
+//!         --cors-referer
+//!             Set the CORS Access-Control-Allow-Origin header to the Referer
+//!
+//!     -d, --dir <dir>
+//!             Directory of pact files to load (can be repeated)
+//!
+//!     -e, --extension <ext>
+//!             File extension to use when loading from a directory (default is json)
+//!
+//!         --empty-provider-state
+//!             Include empty provider states when filtering with --provider-state
+//!
+//!     -f, --file <file>
+//!             Pact file to load (can be repeated)
+//!
+//!     -h, --help
+//!             Print help information
+//!
+//!         --insecure-tls
+//!             Disables TLS certificate validation
+//!
+//!     -l, --loglevel <loglevel>
+//!             Log level (defaults to info) [possible values: error, warn, info, debug, trace, none]
+//!
+//!     -o, --cors
+//!             Automatically respond to OPTIONS requests and return default CORS headers
+//!
+//!     -p, --port <port>
+//!             Port to run on (defaults to random port assigned by the OS)
+//!
+//!         --provider-names <provider-names>...
+//!             Provider names to use to filter the Pacts fetched from the Pact broker
+//!
+//!         --provider-state-header-name <provider-state-header-name>
+//!             Name of the header parameter containing the provider state to be used in case multiple
+//!             matching interactions are found
+//!
+//!     -s, --provider-state <provider-state>
+//!             Provider state regular expression to filter the responses by
+//!
+//!     -t, --token <token>
+//!             Bearer token to use when fetching pacts from URLS or Pact Broker
+//!
+//!     -u, --url <url>
+//!             URL of pact file to fetch (can be repeated)
+//!
+//!         --user <user>
+//!             User and password to use when fetching pacts from URLS or Pact Broker in user:password
+//!             form
+//!
+//!     -v, --version
+//!             Print version information
 //! ```
 //!
 //! ## Options
@@ -48,6 +93,7 @@
 //! | `-f, --file <file>` | File | Loads a pact from the given file |
 //! | `-u, --url <url>` | URL | Loads a pact from a URL resource |
 //! | `-d, --dir <dir>` | Directory | Loads all the pacts from the given directory |
+//! | `-b, --broker-url <broker-url>` | URL | Loads all the pacts from the Pact broker |
 //!
 //! ### Server Options
 //!
