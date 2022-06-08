@@ -5,12 +5,12 @@ use http::header::{ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE};
 use http::header::HeaderValue;
 use http::request::Parts;
 use hyper::{Body, Response as HyperResponse};
-use log::*;
 use pact_models::content_types::TEXT;
 use pact_models::http_parts::HttpPart;
 use pact_models::prelude::*;
 use pact_models::query_strings::parse_query_string;
 use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
+use tracing::{debug, info, warn};
 
 fn extract_query_string(uri: &Uri) -> Option<HashMap<String, Vec<String>>> {
     match uri.query() {

@@ -8,7 +8,6 @@ use futures::task::{Context, Poll};
 use http::{Error, StatusCode};
 use hyper::{Body, Request as HyperRequest, Response as HyperResponse, Server};
 use itertools::Itertools;
-use log::*;
 use maplit::*;
 use pact_matching::{CoreMatchingContext, DiffConfig, Mismatch};
 use pact_models::generators::GeneratorTestMode;
@@ -18,6 +17,7 @@ use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
 use pact_models::v4::V4InteractionType;
 use regex::Regex;
 use tower_service::Service;
+use tracing::{debug, error, info, warn};
 
 use crate::pact_support;
 
@@ -397,8 +397,12 @@ mod test {
         response: HttpResponse { status: 201, .. HttpResponse::default() },
         .. SynchronousHttp::default() };
 
-    let pact = V4Pact {
-      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4() ],
+    let pact1 = V4Pact {
+      interactions: vec![ interaction1.boxed_v4() ],
+      .. V4Pact::default()
+    };
+    let pact2 = V4Pact {
+      interactions: vec![ interaction2.boxed_v4() ],
       .. V4Pact::default()
     };
 
@@ -406,7 +410,7 @@ mod test {
         body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None, None),
         .. HttpRequest::default() };
 
-    expect!(super::find_matching_request(&request1, false, false, vec![pact], None, false).await)
+    expect!(super::find_matching_request(&request1, false, false, vec![pact1, pact2], None, false).await)
       .to(be_ok().value(interaction2.response));
   }
 

@@ -71,15 +71,15 @@ use base64::encode;
 use clap::{App, AppSettings, Arg, ArgMatches, ErrorKind};
 use clap::crate_version;
 use futures::stream::*;
-use log::*;
-use log::LevelFilter;
 use maplit::*;
 use pact_models::pact::{load_pact_from_json, read_pact};
 use pact_models::prelude::*;
 use pact_verifier::pact_broker::HALClient;
 use regex::Regex;
 use serde_json::Value;
-use simplelog::{ColorChoice, Config, SimpleLogger, TerminalMode, TermLogger};
+use tracing::{debug, error, warn};
+use tracing_core::LevelFilter;
+use tracing_subscriber::FmtSubscriber;
 
 use crate::server::ServerHandler;
 
@@ -148,7 +148,7 @@ async fn main() -> Result<(), ExitCode> {
 
 fn print_version() {
     println!("\npact stub server version  : v{}", crate_version!());
-    println!("pact specification version: v{}", PactSpecification::V3.version_str());
+    println!("pact specification version: v{}", PactSpecification::V4.version_str());
 }
 
 fn integer_value(v: String) -> Result<(), String> {
@@ -497,12 +497,16 @@ async fn handle_command_args() -> Result<(), u8> {
 
 fn setup_logger(level: &str) {
   let log_level = match level {
-    "none" => LevelFilter::Off,
-    _ => LevelFilter::from_str(level).unwrap()
+    "none" => LevelFilter::OFF,
+    _ => LevelFilter::from_str(level).unwrap_or(LevelFilter::INFO)
   };
-  if TermLogger::init(log_level, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).is_err() {
-    SimpleLogger::init(log_level, Config::default()).unwrap_or_default();
-  }
+  let subscriber = FmtSubscriber::builder()
+    .with_max_level(log_level)
+    .with_thread_names(true)
+    .finish();
+  if let Err(err) = tracing::subscriber::set_global_default(subscriber) {
+    eprintln!("ERROR: Failed to initialise global tracing subscriber - {err}");
+  };
 }
 
 #[cfg(test)]
