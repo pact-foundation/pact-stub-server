@@ -61,89 +61,28 @@
 #![warn(missing_docs)]
 
 use std::env;
-use std::fmt::{Display, Formatter};
-use std::fs;
-use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 
-use base64::encode;
 use clap::{Command, Arg, ArgMatches, ErrorKind};
-use futures::stream::*;
-use maplit::*;
-use pact_models::pact::{load_pact_from_json, read_pact};
+use itertools::Itertools;
 use pact_models::prelude::*;
-use pact_verifier::pact_broker::HALClient;
 use regex::Regex;
-use serde_json::Value;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 use tracing_core::LevelFilter;
 use tracing_subscriber::FmtSubscriber;
+use crate::loading::load_pacts;
 
 use crate::server::ServerHandler;
 
 mod pact_support;
 mod server;
-
-#[derive(Debug, Clone)]
-struct PactError {
-  message: String,
-  path: Option<String>
-}
-
-impl PactError {
-  fn new(str: String) -> PactError {
-    PactError { message: str, path: None }
-  }
-
-  fn with_path(&self, path: &Path) -> PactError {
-    PactError {
-      message: self.message.clone(),
-      path: path.to_str().map(|p| p.to_string())
-    }
-  }
-}
-
-impl Display for PactError {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    match &self.path {
-      Some(path) => write!(f, "{} - {}", self.message, path),
-      None => write!(f, "{}", self.message)
-    }
-  }
-}
-
-impl From<reqwest::Error> for PactError {
-  fn from(err: reqwest::Error) -> Self {
-    PactError { message: format!("Request failed: {}", err), path: None }
-  }
-}
-
-impl From<serde_json::error::Error> for PactError {
-  fn from(err: serde_json::error::Error) -> Self {
-    PactError { message: format!("Failed to parse JSON body: {}", err), path: None }
-  }
-}
-
-impl From<std::io::Error> for PactError {
-  fn from(err: std::io::Error) -> Self {
-    PactError { message: format!("Failed to load pact file: {}", err), path: None }
-  }
-}
-
-impl From<anyhow::Error> for PactError {
-  fn from(err: anyhow::Error) -> Self {
-    PactError { message: format!("Failed to load pact file: {}", err), path: None }
-  }
-}
+mod loading;
 
 #[tokio::main]
 async fn main() -> Result<(), ExitCode> {
   let args: Vec<String> = env::args().collect();
-  match handle_command_args(args).await {
-    Ok(_) => Ok(()),
-    Err(err) => Err(ExitCode::from(err))
-  }
+  handle_command_args(args).await
 }
 
 fn print_version() {
@@ -169,7 +108,16 @@ pub enum PactSource {
   /// Load the pact from a URL
   URL(String, Option<HttpAuth>),
   /// Load all pacts from a Pact Broker
-  Broker(String, Option<HttpAuth>)
+  Broker {
+    /// Broker URL
+    url: String,
+    /// Any required auth
+    auth: Option<HttpAuth>,
+    /// Consumer names to filter Pacts with
+    consumers: Vec<String>,
+    /// Provider names to filter Pacts with
+    providers: Vec<String>
+  }
 }
 
 fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
@@ -197,108 +145,19 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
     }).or_else(|| matches.value_of("token").map(|v| HttpAuth::Token(v.to_string())));
     debug!("Loading all pacts from Pact Broker at {} using {} authentication", url,
       auth.clone().map(|auth| auth.to_string()).unwrap_or_else(|| "no".to_string()));
-    sources.push(PactSource::Broker(url.to_string(), auth));
+    sources.push(PactSource::Broker {
+      url: url.to_string(),
+      auth,
+      consumers: matches.values_of("consumer-names").map(|v| v.map(ToString::to_string)
+        .collect_vec()).unwrap_or_default(),
+      providers: matches.values_of("provider-names").map(|v| v.map(ToString::to_string)
+        .collect_vec()).unwrap_or_default()
+    });
   }
   sources
 }
 
-fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact + Send + Sync>, PactError>>, PactError> {
-  let mut pacts = vec![];
-  debug!("Scanning {:?}", dir);
-  for entry in fs::read_dir(dir)? {
-    let path = entry?.path();
-    if path.is_dir() {
-      walkdir(&path, ext)?;
-    } else if path.extension().is_some() && path.extension().unwrap_or_default() == ext {
-      debug!("Loading file '{:?}'", path);
-      pacts.push(read_pact(&path)
-        .map_err(|err| PactError::from(err).with_path(path.as_path())))
-    }
-  }
-  Ok(pacts)
-}
-
-async fn pact_from_url(
-  url: &str,
-  auth: &Option<HttpAuth>,
-  insecure_tls: bool
-) -> Result<Box<dyn Pact + Send + Sync>, PactError> {
-  let client = if insecure_tls {
-    warn!("Disabling TLS certificate validation");
-    reqwest::Client::builder()
-      .danger_accept_invalid_certs(true)
-      .build()?
-  } else {
-    reqwest::Client::builder().build()?
-  };
-  let mut req = client.get(url);
-  if let Some(u) = auth {
-    req = match u {
-      HttpAuth::User(user, password) => if let Some(pass) = password {
-        req.header("Authorization", format!("Basic {}", encode(format!("{}:{}", user, pass))))
-      } else {
-        req.header("Authorization", format!("Basic {}", encode(user)))
-      },
-      HttpAuth::Token(token) => req.header("Authorization", format!("Bearer {}", token)),
-     _ => req.header("Authorization", "undefined"),
-    };
-  }
-  debug!("Executing Request to fetch pact from URL: {}", url);
-  let pact_json: Value = req.send().await?.json().await?;
-  debug!("Fetched Pact: {}", pact_json);
-  load_pact_from_json(url, &pact_json).map_err(|err| err.into())
-}
-
-async fn load_pacts(
-  sources: Vec<PactSource>,
-  insecure_tls: bool,
-  ext: Option<&str>
-) -> Vec<Result<Box<dyn Pact + Send + Sync>, PactError>> {
-  futures::stream::iter(sources.iter().cloned()).then(| s| async move {
-    let val = match &s {
-      PactSource::File(file) => vec![
-        read_pact(Path::new(file)).map_err(PactError::from)
-      ],
-      PactSource::Dir(dir) => match walkdir(Path::new(dir), ext.unwrap_or("json")) {
-        Ok(pacts) => pacts,
-        Err(err) => vec![Err(PactError::new(format!("Could not load pacts from directory '{}' - {}", dir, err)))]
-      },
-      PactSource::URL(url, auth) => vec![pact_from_url(url, auth, insecure_tls).await],
-      PactSource::Broker(url, auth) => {
-        let client = HALClient::with_url(url, auth.clone());
-        match client.navigate("pb:latest-pact-versions", &hashmap!{}).await {
-          Ok(client) => {
-            match client.clone().iter_links("pb:pacts") {
-              Ok(links) => {
-                futures::stream::iter(links.iter().map(|link| (link.clone(), client.clone())))
-                  .then(|(link, client)| {
-                    async move {
-                      client.clone().fetch_url(&link, &hashmap!{}).await
-                        .map_err(|err| PactError::new(err.to_string()))
-                        .and_then(|json| {
-                          let pact_title = link.title.clone().unwrap_or_else(|| link.href.clone().unwrap_or_default());
-                          debug!("Found pact {}", pact_title);
-                          load_pact_from_json(link.href.clone().unwrap_or_default().as_str(), &json)
-                            .map_err(|err|
-                              PactError::new(format!("Error loading \"{}\" ({}) - {}", pact_title, link.href.unwrap_or_default(), err))
-                            )
-                        })
-                    }
-                  })
-                  .collect().await
-              },
-              Err(err) => vec![Err(PactError::new(err.to_string()))]
-            }
-          }
-          Err(err) => vec![Err(PactError::new(err.to_string()))]
-        }
-      }
-    };
-    futures::stream::iter(val)
-  }).flatten().collect().await
-}
-
-async fn handle_command_args(args: Vec<String>) -> Result<(), u8> {
+async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
   let program = args[0].clone();
   let version = format!("v{}", env!("CARGO_PKG_VERSION"));
   let app = build_args(program.as_str(), version.as_str());
@@ -320,7 +179,7 @@ async fn handle_command_args(args: Vec<String>) -> Result<(), u8> {
           }) {
           error!("  - {}", error);
         }
-        Err(3)
+        Err(ExitCode::from(3))
       } else {
         let port = matches.value_of("port").unwrap_or("0").parse::<u16>().unwrap();
         let provider_state = matches.value_of("provider-state")
@@ -333,7 +192,9 @@ async fn handle_command_args(args: Vec<String>) -> Result<(), u8> {
             // Currently, as_v4_pact won't fail as it upgrades older formats to V4, so is safe to unwrap
             result.as_ref().unwrap().as_v4_pact().unwrap()
           })
-          .collect();
+          .collect::<Vec<_>>();
+        let interactions: usize = pacts.iter().map(|p| p.interactions.len()).sum();
+        info!("Loaded {} pacts ({} total interactions)", pacts.len(), interactions);
         let auto_cors = matches.is_present("cors");
         let referer = matches.is_present("cors-referer");
         let server_handler = ServerHandler::new(
@@ -484,6 +345,18 @@ fn build_args<'a>(program: &'a str, version: &'a str) -> Command<'a> {
       .long("empty-provider-state")
       .requires("provider-state")
       .help("Include empty provider states when filtering with --provider-state"))
+    .arg(Arg::new("consumer-names")
+      .long("consumer-names")
+      .requires("broker-url")
+      .takes_value(true)
+      .multiple_values(true)
+      .help("Consumer names to use to filter the Pacts fetched from the Pact broker"))
+    .arg(Arg::new("provider-names")
+      .long("provider-names")
+      .requires("broker-url")
+      .takes_value(true)
+      .multiple_values(true)
+      .help("Provider names to use to filter the Pacts fetched from the Pact broker"))
 }
 
 fn setup_logger(level: &str) {

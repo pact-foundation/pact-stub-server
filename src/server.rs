@@ -1,4 +1,5 @@
 use std::pin::Pin;
+use std::process::ExitCode;
 
 use anyhow::anyhow;
 use futures::future::Future;
@@ -50,7 +51,7 @@ impl ServerHandler {
     }
   }
 
-  pub fn start_server(self, port: u16) -> Result<(), u8> {
+  pub fn start_server(self, port: u16) -> Result<(), ExitCode> {
     let addr = ([0, 0, 0, 0], port).into();
     match Server::try_bind(&addr) {
       Ok(builder) => {
@@ -64,13 +65,13 @@ impl ServerHandler {
         info!("Server started on port {}", server.local_addr().port());
         block_on(server).map_err(|err| {
           error!("error occurred scheduling server future on Tokio runtime: {}", err);
-          2
+          ExitCode::from(2)
         })?;
         Ok(())
       },
       Err(err) => {
         error!("could not start server: {}", err);
-        Err(1)
+        Err(ExitCode::FAILURE)
       }
     }
   }
