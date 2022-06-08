@@ -50,6 +50,9 @@ OPTIONS:
     -b, --broker-url <broker-url>
             URL of the pact broker to fetch pacts from [env: PACT_BROKER_BASE_URL=]
 
+        --consumer-names <consumer-names>...
+            Consumer names to use to filter the Pacts fetched from the Pact broker
+
         --cors-referer
             Set the CORS Access-Control-Allow-Origin header to the Referer
 
@@ -79,6 +82,9 @@ OPTIONS:
 
     -p, --port <port>
             Port to run on (defaults to random port assigned by the OS)
+
+        --provider-names <provider-names>...
+            Provider names to use to filter the Pacts fetched from the Pact broker
 
         --provider-state-header-name <provider-state-header-name>
             Name of the header parameter containing the provider state to be used in case multiple
