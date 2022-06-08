@@ -1,7 +1,7 @@
 FROM debian:11-slim
-ARG VERSION=0.4.4
+ARG VERSION=0.5.0
 WORKDIR /app
-RUN apt-get update && apt-get install -y curl openssl && \
+RUN apt-get update && apt-get install -y curl && \
     curl -L -o pact-stub-server.gz https://github.com/uglyog/pact-stub-server/releases/download/v$VERSION/pact-stub-server-linux-x86_64.gz && \
     gunzip pact-stub-server.gz && \
     chmod +x pact-stub-server && \
