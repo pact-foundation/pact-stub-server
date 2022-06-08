@@ -61,10 +61,10 @@
 #![warn(missing_docs)]
 
 use std::env;
-use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::Path;
+use std::process::ExitCode;
 use std::str::FromStr;
 
 use base64::encode;
@@ -74,13 +74,12 @@ use futures::stream::*;
 use log::*;
 use log::LevelFilter;
 use maplit::*;
-use pact_matching::models::{load_pact_from_json, Pact, PactSpecification, read_pact};
-use pact_models::http_utils::HttpAuth;
-use pact_matching::s;
+use pact_models::pact::{load_pact_from_json, read_pact};
+use pact_models::prelude::*;
 use pact_verifier::pact_broker::HALClient;
 use regex::Regex;
 use serde_json::Value;
-use simplelog::{Config, SimpleLogger, TerminalMode, TermLogger};
+use simplelog::{ColorChoice, Config, SimpleLogger, TerminalMode, TermLogger};
 
 use crate::server::ServerHandler;
 
@@ -133,11 +132,17 @@ impl From<std::io::Error> for PactError {
   }
 }
 
+impl From<anyhow::Error> for PactError {
+  fn from(err: anyhow::Error) -> Self {
+    PactError { message: format!("Failed to load pact file: {}", err), path: None }
+  }
+}
+
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), ExitCode> {
   match handle_command_args().await {
     Ok(_) => Ok(()),
-    Err(err) => std::process::exit(err)
+    Err(err) => Err(ExitCode::from(err))
   }
 }
 
@@ -182,7 +187,7 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
         HttpAuth::User(auth.next().unwrap().to_string(), auth.next().map(|p| p.to_string()))
       })
         .or_else(|| matches.value_of("token").map(|v| HttpAuth::Token(v.to_string())));
-      PactSource::URL(s!(v), auth)
+      PactSource::URL(v.to_string(), auth)
     }).collect::<Vec<PactSource>>());
   }
   if let Some(url) = matches.value_of("broker-url") {
@@ -197,7 +202,7 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
   sources
 }
 
-fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact>, PactError>>, PactError> {
+fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact + Send + Sync>, PactError>>, PactError> {
   let mut pacts = vec![];
   debug!("Scanning {:?}", dir);
   for entry in fs::read_dir(dir)? {
@@ -217,7 +222,7 @@ async fn pact_from_url(
   url: &str,
   auth: &Option<HttpAuth>,
   insecure_tls: bool
-) -> Result<Box<dyn Pact>, PactError> {
+) -> Result<Box<dyn Pact + Send + Sync>, PactError> {
   let client = if insecure_tls {
     warn!("Disabling TLS certificate validation");
     reqwest::Client::builder()
@@ -241,14 +246,14 @@ async fn pact_from_url(
   debug!("Executing Request to fetch pact from URL: {}", url);
   let pact_json: Value = req.send().await?.json().await?;
   debug!("Fetched Pact: {}", pact_json);
-  load_pact_from_json(url, &pact_json).map_err(PactError::new)
+  load_pact_from_json(url, &pact_json).map_err(|err| err.into())
 }
 
 async fn load_pacts(
   sources: Vec<PactSource>,
   insecure_tls: bool,
   ext: Option<&str>
-) -> Vec<Result<Box<dyn Pact>, PactError>> {
+) -> Vec<Result<Box<dyn Pact + Send + Sync>, PactError>> {
   futures::stream::iter(sources.iter().cloned()).then(| s| async move {
     let val = match &s {
       PactSource::File(file) => vec![
@@ -293,7 +298,7 @@ async fn load_pacts(
   }).flatten().collect().await
 }
 
-async fn handle_command_args() -> Result<(), i32> {
+async fn handle_command_args() -> Result<(), u8> {
   let args: Vec<String> = env::args().collect();
   let program = args[0].clone();
 
@@ -454,9 +459,10 @@ async fn handle_command_args() -> Result<(), i32> {
             .map(String::from);
         let empty_provider_states = matches.is_present("empty-provider-state");
         let pacts = pacts.iter()
-          .map(|p| p.as_ref().unwrap())
-          .flat_map(|pact| pact.interactions())
-          .map(|interaction| interaction.thread_safe())
+          .map(|result| {
+            // Currently, as_v4_pact won't fail as it upgrades older formats to V4, so is safe to unwrap
+            result.as_ref().unwrap().as_v4_pact().unwrap()
+          })
           .collect();
         let auto_cors = matches.is_present("cors");
         let referer = matches.is_present("cors-referer");
@@ -494,7 +500,7 @@ fn setup_logger(level: &str) {
     "none" => LevelFilter::Off,
     _ => LevelFilter::from_str(level).unwrap()
   };
-  if TermLogger::init(log_level, Config::default(), TerminalMode::Mixed).is_err() {
+  if TermLogger::init(log_level, Config::default(), TerminalMode::Mixed, ColorChoice::Auto).is_err() {
     SimpleLogger::init(log_level, Config::default()).unwrap_or_default();
   }
 }

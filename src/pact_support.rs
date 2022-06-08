@@ -1,18 +1,20 @@
-use http::{HeaderMap, Uri, Error};
+use std::collections::HashMap;
+
+use http::{Error, HeaderMap, Uri};
 use http::header::{ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE};
 use http::header::HeaderValue;
 use http::request::Parts;
 use hyper::{Body, Response as HyperResponse};
-use pact_matching::models::{HttpPart, OptionalBody, Request, Response};
-use pact_matching::models::parse_query_string;
-use std::collections::HashMap;
 use log::*;
-use pact_matching::s;
-use pact_matching::models::content_types::TEXT;
+use pact_models::content_types::TEXT;
+use pact_models::http_parts::HttpPart;
+use pact_models::prelude::*;
+use pact_models::query_strings::parse_query_string;
+use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
 
 fn extract_query_string(uri: &Uri) -> Option<HashMap<String, Vec<String>>> {
     match uri.query() {
-        Some(q) => parse_query_string(&s!(q)),
+        Some(q) => parse_query_string(q),
         None => None
     }
 }
@@ -41,18 +43,18 @@ fn extract_headers(headers: &HeaderMap<HeaderValue>) -> Option<HashMap<String, V
   }
 }
 
-pub fn hyper_request_to_pact_request(req: Parts, body: OptionalBody) -> Request {
-    Request {
-        method: req.method.to_string(),
-        path: req.uri.path().to_string(),
-        query: extract_query_string(&req.uri),
-        headers: extract_headers(&req.headers),
-        body,
-        .. Request::default()
-    }
+pub fn hyper_request_to_pact_request(req: Parts, body: OptionalBody) -> HttpRequest {
+  HttpRequest {
+    method: req.method.to_string(),
+    path: req.uri.path().to_string(),
+    query: extract_query_string(&req.uri),
+    headers: extract_headers(&req.headers),
+    body,
+    .. HttpRequest::default()
+  }
 }
 
-pub fn pact_response_to_hyper_response(response: &Response) -> Result<HyperResponse<Body>, Error> {
+pub fn pact_response_to_hyper_response(response: &HttpResponse) -> Result<HyperResponse<Body>, Error> {
   info!("<=== Sending {}", response);
   debug!("     body: '{}'", response.body.str_value());
   debug!("     matching_rules: {:?}", response.matching_rules);
@@ -73,7 +75,7 @@ pub fn pact_response_to_hyper_response(response: &Response) -> Result<HyperRespo
   }
 
   match &response.body {
-    OptionalBody::Present(ref body, content_type) => {
+    OptionalBody::Present(ref body, content_type, _) => {
       let content_type_header = CONTENT_TYPE;
       if !response.has_header(content_type_header.as_str()) {
         let content_type = content_type.clone()
@@ -88,63 +90,64 @@ pub fn pact_response_to_hyper_response(response: &Response) -> Result<HyperRespo
 
 #[cfg(test)]
 mod test {
-    use expectest::prelude::*;
-    use http::header::HeaderValue;
-    use http::status::StatusCode;
-    use pact_matching::models::{OptionalBody, Response};
-    use super::*;
-    use maplit::*;
+  use expectest::prelude::*;
+  use http::header::HeaderValue;
+  use http::status::StatusCode;
+  use maplit::*;
+  use pact_models::prelude::*;
 
-    #[test]
-    fn test_response() {
-        let response = Response {
-            status: 201,
-            headers: Some(hashmap! {  }),
-            .. Response::default()
-        };
-        let hyper_response = pact_response_to_hyper_response(&response).unwrap();
+  use super::*;
 
-        expect!(hyper_response.status()).to(be_equal_to(StatusCode::CREATED));
-        expect!(hyper_response.headers().len()).to(be_equal_to(1));
-        expect!(hyper_response.headers().get("Access-Control-Allow-Origin")).to(be_some().value(HeaderValue::from_static("*")));
-    }
+  #[test]
+  fn test_response() {
+      let response = HttpResponse {
+          status: 201,
+          headers: Some(hashmap! {  }),
+          .. HttpResponse::default()
+      };
+      let hyper_response = pact_response_to_hyper_response(&response).unwrap();
 
-    #[test]
-    fn test_response_with_content_type() {
-        let response = Response {
-            status: 201,
-            headers: Some(hashmap! { s!("Content-Type") => vec![s!("text/dizzy")] }),
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
-            .. Response::default()
-        };
-        let hyper_response = pact_response_to_hyper_response(&response).unwrap();
+      expect!(hyper_response.status()).to(be_equal_to(StatusCode::CREATED));
+      expect!(hyper_response.headers().len()).to(be_equal_to(1));
+      expect!(hyper_response.headers().get("Access-Control-Allow-Origin")).to(be_some().value(HeaderValue::from_static("*")));
+  }
 
-        expect!(hyper_response.status()).to(be_equal_to(StatusCode::CREATED));
-        expect!(hyper_response.headers().is_empty()).to(be_false());
-        expect!(hyper_response.headers().get("content-type")).to(be_some().value(HeaderValue::from_static("text/dizzy")));
-    }
+  #[test]
+  fn test_response_with_content_type() {
+      let response = HttpResponse {
+          status: 201,
+          headers: Some(hashmap! { "Content-Type".to_string() => vec!["text/dizzy".to_string()] }),
+          body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None, None),
+          .. HttpResponse::default()
+      };
+      let hyper_response = pact_response_to_hyper_response(&response).unwrap();
 
-    #[test]
-    fn adds_a_content_type_if_there_is_not_one_and_there_is_a_body() {
-        let response = Response {
-            body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
-            .. Response::default()
-        };
-        let hyper_response = pact_response_to_hyper_response(&response).unwrap();
+      expect!(hyper_response.status()).to(be_equal_to(StatusCode::CREATED));
+      expect!(hyper_response.headers().is_empty()).to(be_false());
+      expect!(hyper_response.headers().get("content-type")).to(be_some().value(HeaderValue::from_static("text/dizzy")));
+  }
 
-        expect!(hyper_response.headers().is_empty()).to(be_false());
-        expect!(hyper_response.headers().get("content-type")).to(be_some().value(HeaderValue::from_static("application/json")));
-    }
+  #[test]
+  fn adds_a_content_type_if_there_is_not_one_and_there_is_a_body() {
+      let response = HttpResponse {
+          body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None, None),
+          .. HttpResponse::default()
+      };
+      let hyper_response = pact_response_to_hyper_response(&response).unwrap();
 
-    #[test]
-    fn only_add_a_cors_origin_header_if_one_has_not_already_been_provided() {
-        let response = Response {
-            headers: Some(hashmap! { s!("Access-Control-Allow-Origin") => vec![s!("dodgy.com")] }),
-            .. Response::default()
-        };
-        let hyper_response = pact_response_to_hyper_response(&response).unwrap();
+      expect!(hyper_response.headers().is_empty()).to(be_false());
+      expect!(hyper_response.headers().get("content-type")).to(be_some().value(HeaderValue::from_static("application/json")));
+  }
 
-        expect!(hyper_response.headers().len()).to(be_equal_to(1));
-        expect!(hyper_response.headers().get("Access-Control-Allow-Origin")).to(be_some().value(HeaderValue::from_static("dodgy.com")));
-    }
+  #[test]
+  fn only_add_a_cors_origin_header_if_one_has_not_already_been_provided() {
+      let response = HttpResponse {
+          headers: Some(hashmap! { "Access-Control-Allow-Origin".to_string() => vec!["dodgy.com".to_string()] }),
+          .. HttpResponse::default()
+      };
+      let hyper_response = pact_response_to_hyper_response(&response).unwrap();
+
+      expect!(hyper_response.headers().len()).to(be_equal_to(1));
+      expect!(hyper_response.headers().get("Access-Control-Allow-Origin")).to(be_some().value(HeaderValue::from_static("dodgy.com")));
+  }
 }

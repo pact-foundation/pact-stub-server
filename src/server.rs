@@ -1,7 +1,8 @@
-use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
 
+use anyhow::anyhow;
+use futures::future::Future;
+use futures::stream::StreamExt;
 use futures::executor::block_on;
 use futures::task::{Context, Poll};
 use http::{Error, StatusCode};
@@ -9,19 +10,20 @@ use hyper::{Body, Request as HyperRequest, Response as HyperResponse, Server};
 use itertools::Itertools;
 use log::*;
 use maplit::*;
-use pact_matching::{self, Mismatch, MatchingContext, DiffConfig};
-use pact_matching::models::{Interaction, Request, Response, RequestResponseInteraction};
-use pact_matching::models::OptionalBody;
-use pact_matching::s;
+use pact_matching::{CoreMatchingContext, DiffConfig, Mismatch};
+use pact_models::generators::GeneratorTestMode;
+use pact_models::prelude::*;
+use pact_models::prelude::v4::*;
+use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
+use pact_models::v4::V4InteractionType;
 use regex::Regex;
 use tower_service::Service;
 
 use crate::pact_support;
-use pact_matching::models::generators::GeneratorTestMode;
 
 #[derive(Clone)]
 pub struct ServerHandler {
-  sources: Vec<Arc<Mutex<dyn Interaction + Send + Sync>>>,
+  sources: Vec<V4Pact>,
   auto_cors: bool,
   cors_referer: bool,
   provider_state: Option<Regex>,
@@ -31,7 +33,7 @@ pub struct ServerHandler {
 
 impl ServerHandler {
   pub fn new(
-    sources: Vec<Arc<Mutex<dyn Interaction + Send + Sync>>>,
+    sources: Vec<V4Pact>,
     auto_cors: bool,
     cors_referer: bool,
     provider_state: Option<Regex>,
@@ -48,7 +50,7 @@ impl ServerHandler {
     }
   }
 
-  pub fn start_server(self, port: u16) -> Result<(), i32> {
+  pub fn start_server(self, port: u16) -> Result<(), u8> {
     let addr = ([0, 0, 0, 0], port).into();
     match Server::try_bind(&addr) {
       Ok(builder) => {
@@ -85,7 +87,7 @@ impl Service<HyperRequest<Body>> for ServerHandler {
 
   fn call(&mut self, req: HyperRequest<Body>) -> Self::Future {
     let auto_cors = self.auto_cors;
-    let cors_referrer = self.cors_referer;
+    let cors_referer = self.cors_referer;
     let sources = self.sources.clone();
     let provider_state = self.provider_state.clone();
     let provider_state_header_name = self.provider_state_header_name.clone();
@@ -110,7 +112,7 @@ impl Service<HyperRequest<Body>> for ServerHandler {
         Ok(contents) => if contents.is_empty() {
           OptionalBody::Empty
         } else {
-          OptionalBody::Present(contents, None)
+          OptionalBody::Present(contents, None, None)
         },
         Err(err) => {
           warn!("Failed to read request body: {}", err);
@@ -118,50 +120,62 @@ impl Service<HyperRequest<Body>> for ServerHandler {
         }
       };
       let request = pact_support::hyper_request_to_pact_request(parts, body);
-      let response = handle_request(request, auto_cors, cors_referrer, sources, provider_state,
-        empty_provider_states);
+      let response = handle_request(request, auto_cors, cors_referer,
+        sources, provider_state, empty_provider_states).await;
       pact_support::pact_response_to_hyper_response(&response)
     })
   }
 }
 
-fn method_supports_payload(request: &Request) -> bool {
+fn method_supports_payload(request: &HttpRequest) -> bool {
   matches!(request.method.to_uppercase().as_str(), "POST" | "PUT" | "PATCH")
 }
 
-fn find_matching_request(
-  request: &Request,
+async fn find_matching_request(
+  request: &HttpRequest,
   auto_cors: bool,
   cors_referer: bool,
-  sources: &Vec<RequestResponseInteraction>,
+  sources: Vec<V4Pact>,
   provider_state: Option<Regex>,
   empty_provider_states: bool
-) -> Result<Response, String> {
+) -> anyhow::Result<HttpResponse> {
   match &provider_state {
     Some(state) => info!("Filtering interactions by provider state regex '{}'", state),
     None => ()
   }
-  let match_results = sources
-    .iter()
-    .filter(|interaction| {
-      let path_context = MatchingContext::new(DiffConfig::NoUnexpectedKeys,
-        &interaction.request.matching_rules.rules_for_category("path").unwrap_or_default());
-      pact_matching::match_method(&interaction.request.method, &request.method).is_ok() &&
-        pact_matching::match_path(&interaction.request.path, &request.path, &path_context).is_ok()
+
+  // Get a subset of all interactions across all pacts that match the method and path
+  let interactions = sources.iter()
+    .flat_map(|source| {
+      source.filter_interactions(V4InteractionType::Synchronous_HTTP)
+        .iter()
+        .map(|i| (i.as_v4_http().unwrap(), source.clone()))
+        .collect_vec()
     })
-    .filter(|i| {
+    .filter(|(http, _)| {
+      let path_context = CoreMatchingContext::new(DiffConfig::NoUnexpectedKeys,
+        &http.request.matching_rules.rules_for_category("path").unwrap_or_default(),
+        &hashmap! {}
+      );
+      pact_matching::match_method(&http.request.method, &request.method).is_ok() &&
+        pact_matching::match_path(&http.request.path, &request.path, &path_context).is_ok()
+    })
+    .filter(|(i, _)| {
+      let ps = &i.provider_states;
       match provider_state {
-        Some(ref regex) => empty_provider_states && i.provider_states().is_empty() ||
-          i.provider_states().iter().any(|state|
+        Some(ref regex) => empty_provider_states && ps.is_empty() ||
+          ps.iter().any(|state|
             empty_provider_states && state.name.is_empty() || regex.is_match(state.name.as_str())),
         None => true
       }
-    })
-    .map(|i| {
-      (i.clone(), pact_matching::match_request(i.request.clone(), request.clone()).mismatches())
-    })
-    .filter(|(_, mismatches)| {
-      mismatches.iter().all(|mismatch|{
+    });
+
+  // Match all interactions from the sublist against the incoming request
+  let results = futures::stream::iter(interactions)
+    .filter_map(|(i, pact)| async move {
+      let result = pact_matching::match_request(i.request.clone(), request.clone(), &pact.boxed(), &i.boxed()).await;
+      let mismatches = result.mismatches();
+      let all_matched = mismatches.iter().all(|mismatch|{
         match mismatch {
           Mismatch::MethodMismatch { .. } => false,
           Mismatch::PathMismatch { .. } => false,
@@ -169,10 +183,21 @@ fn find_matching_request(
           Mismatch::BodyMismatch { .. } => !(method_supports_payload(request) && request.body.is_present()),
           _ => true
         }
-      })
+      });
+      if all_matched {
+        Some((i.clone(), mismatches.clone()))
+      } else {
+        None
+      }
     })
+    .collect::<Vec<_>>()
+    .await;
+
+  // Find the result with the least number of mismatches
+  let match_results = results.iter()
     .sorted_by(|a, b| Ord::cmp(&a.1.len(), &b.1.len()))
-    .collect::<Vec<(RequestResponseInteraction, Vec<Mismatch>)>>();
+    .cloned()
+    .collect::<Vec<(SynchronousHttp, Vec<Mismatch>)>>();
 
   if match_results.len() > 1 {
     warn!("Found more than one pact request for method {} and path '{}', using the first one with the least number of mismatches",
@@ -180,7 +205,7 @@ fn find_matching_request(
   }
 
   match match_results.first() {
-    Some((interaction, _)) => Ok(pact_matching::generate_response(&interaction.response,  &GeneratorTestMode::Provider, &hashmap!{})),
+    Some((interaction, _)) => Ok(pact_matching::generate_response(&interaction.response,  &GeneratorTestMode::Provider, &hashmap!{}).await),
     None => {
       if auto_cors && request.method.to_uppercase() == "OPTIONS" {
         let origin = if cors_referer {
@@ -191,50 +216,44 @@ fn find_matching_request(
             None => "*".to_string()
           }
         } else { "*".to_string() };
-        Ok(Response {
+        Ok(HttpResponse {
           headers: Some(hashmap!{
-                    s!("Access-Control-Allow-Headers") => vec![s!("*")],
-                    s!("Access-Control-Allow-Methods") => vec![s!("GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH")],
-                    s!("Access-Control-Allow-Origin") => vec![origin]
-                  }),
-          .. Response::default()
+            "Access-Control-Allow-Headers".to_string() => vec!["*".to_string()],
+            "Access-Control-Allow-Methods".to_string() => vec!["GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH".to_string()],
+            "Access-Control-Allow-Origin".to_string() => vec![origin]
+          }),
+          .. HttpResponse::default()
         })
       } else {
-        Err(s!("No matching request found"))
+        Err(anyhow!("No matching request found for path {}", request.path))
       }
     }
   }
 }
 
-fn handle_request(
-  request: Request,
+async fn handle_request(
+  request: HttpRequest,
   auto_cors: bool,
   cors_referrer: bool,
-  sources: Vec<Arc<Mutex<dyn Interaction + Send + Sync>>>,
+  sources: Vec<V4Pact>,
   provider_state: Option<Regex>,
   empty_provider_states: bool
-) -> Response {
+) -> HttpResponse {
   info! ("===> Received {}", request);
   debug!("     body: '{}'", request.body.str_value());
   debug!("     matching_rules: {:?}", request.matching_rules);
   debug!("     generators: {:?}", request.generators);
-  let interactions = sources.iter().map(|i| {
-    let guard = i.lock().unwrap();
-    guard.as_request_response()
-  }).filter(|i| i.is_some())
-    .map(|i| i.unwrap())
-    .collect();
-  match find_matching_request(&request, auto_cors, cors_referrer, &interactions, provider_state,
-                              empty_provider_states) {
+  match find_matching_request(&request, auto_cors, cors_referrer, sources, provider_state,
+                              empty_provider_states).await {
     Ok(response) => response,
     Err(msg) => {
       warn!("{}, sending {}", msg, StatusCode::NOT_FOUND);
-      let mut response = Response {
+      let mut response = HttpResponse {
         status: StatusCode::NOT_FOUND.as_u16(),
-        .. Response::default()
+        .. HttpResponse::default()
       };
       if auto_cors {
-        response.headers = Some(hashmap!{ s!("Access-Control-Allow-Origin") => vec![s!("*")] })
+        response.headers = Some(hashmap!{ "Access-Control-Allow-Origin".to_string() => vec!["*".to_string()] })
       }
       response
     }
@@ -245,269 +264,311 @@ fn handle_request(
 mod test {
   use expectest::prelude::*;
   use maplit::*;
-  use pact_matching::{matchingrules, s};
-  use pact_matching::models::{OptionalBody, Request, RequestResponseInteraction, Response};
-  use pact_matching::models::matchingrules::*;
-  use pact_matching::models::provider_states::*;
+  use pact_models::matchingrules;
+  use pact_models::matchingrules::MatchingRule;
+  use pact_models::prelude::*;
+  use pact_models::prelude::v4::*;
+  use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
+  use pact_models::v4::interaction::V4Interaction;
   use regex::Regex;
 
-  #[test]
-    fn match_request_finds_the_most_appropriate_response() {
-      let interaction1 = RequestResponseInteraction::default();
-      let interaction2 = RequestResponseInteraction::default();
+  #[tokio::test]
+  async fn match_request_finds_the_most_appropriate_response() {
+    let interaction1 = SynchronousHttp::default();
+    let interaction2 = SynchronousHttp::default();
+    let pact = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      let request1 = Request::default();
+    let request1 = HttpRequest::default();
 
-      expect!(super::find_matching_request(&request1, false, false,
-        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(
-        be_ok().value(interaction1.response));
-    }
+    expect!(super::find_matching_request(&request1, false, false, vec![pact], None, false).await)
+      .to(be_ok().value(interaction1.response));
+  }
 
-    #[test]
-    fn match_request_excludes_requests_with_different_methods() {
-      let interaction1 = RequestResponseInteraction { request: Request { method: s!("PUT"),
-          .. Request::default() }, .. RequestResponseInteraction::default() };
+  #[tokio::test]
+  async fn match_request_excludes_requests_with_different_methods() {
+    let interaction1 = SynchronousHttp { request: HttpRequest { method: "PUT".to_string(),
+        .. HttpRequest::default() }, .. SynchronousHttp::default() };
+    let interaction2 = SynchronousHttp::default();
+    let pact = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      let interaction2 = RequestResponseInteraction::default();
+    let request1 = HttpRequest { method: "POST".to_string(), .. HttpRequest::default() };
 
-      let request1 = Request { method: s!("POST"), .. Request::default() };
+    expect!(super::find_matching_request(&request1, false, false, vec![pact], None, false).await)
+      .to(be_err());
+  }
 
-      expect!(super::find_matching_request(&request1, false, false,
-        &vec![interaction1, interaction2], None, false)).to(be_err());
-    }
+  #[tokio::test]
+  async fn match_request_excludes_requests_with_different_paths() {
+    let interaction1 = SynchronousHttp {
+      request: HttpRequest { path: "/one".to_string(), .. HttpRequest::default() },
+      .. SynchronousHttp::default()
+    };
 
-    #[test]
-    fn match_request_excludes_requests_with_different_paths() {
-      let interaction1 = RequestResponseInteraction {
-        request: Request { path: s!("/one"), .. Request::default() },
-        .. RequestResponseInteraction::default()
-      };
+    let interaction2 = SynchronousHttp::default();
 
-      let interaction2 = RequestResponseInteraction::default();
+    let pact = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      let request1 = Request { path: s!("/two"), .. Request::default() };
+    let request1 = HttpRequest { path: "/two".to_string(), .. HttpRequest::default() };
 
-      expect!(super::find_matching_request(&request1, false, false,
-        &vec![interaction1, interaction2], None, false)).to(be_err());
-    }
+    expect!(super::find_matching_request(&request1, false, false, vec![pact], None, false).await)
+      .to(be_err());
+  }
 
-    #[test]
-    fn match_request_excludes_requests_with_different_query_params() {
-      let interaction1 = RequestResponseInteraction { request: Request {
-          query: Some(hashmap!{ s!("A") => vec![ s!("B") ] }),
-          .. Request::default() }, .. RequestResponseInteraction::default() };
+  #[tokio::test]
+  async fn match_request_excludes_requests_with_different_query_params() {
+    let interaction1 = SynchronousHttp { request: HttpRequest {
+        query: Some(hashmap!{ "A".to_string() => vec![ "B".to_string() ] }),
+        .. HttpRequest::default() }, .. SynchronousHttp::default() };
+    let interaction2 = SynchronousHttp::default();
+    let pact = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      let interaction2 = RequestResponseInteraction::default();
+    let request1 = HttpRequest {
+        query: Some(hashmap!{ "A".to_string() => vec![ "C".to_string() ] }),
+        .. HttpRequest::default() };
 
-      let request1 = Request {
-          query: Some(hashmap!{ s!("A") => vec![ s!("C") ] }),
-          .. Request::default() };
+    expect!(super::find_matching_request(&request1, false, false, vec![pact], None, false).await)
+      .to(be_err());
+  }
 
-      expect!(super::find_matching_request(&request1, false, false,
-        &vec![interaction1, interaction2], None, false)).to(be_err());
-    }
+  #[tokio::test]
+  async fn match_request_excludes_put_or_post_requests_with_different_bodies() {
+    let interaction1 = SynchronousHttp { request: HttpRequest {
+        method: "PUT".to_string(),
+        body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None, None),
+        .. HttpRequest::default() },
+        response: HttpResponse { status: 200, .. HttpResponse::default() },
+        .. SynchronousHttp::default() };
 
-    #[test]
-    fn match_request_excludes_put_or_post_requests_with_different_bodies() {
-      let interaction1 = RequestResponseInteraction { request: Request {
-          method: s!("PUT"),
-          body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
-          .. Request::default() },
-          response: Response { status: 200, .. Response::default() },
-          .. RequestResponseInteraction::default() };
+    let interaction2 = SynchronousHttp { request: HttpRequest {
+        method: "PUT".to_string(),
+        body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None, None),
+        matching_rules: matchingrules!{
+            "body" => {
+                "$.c" => [ MatchingRule::Integer ]
+            }
+        },
+        .. HttpRequest::default() },
+        response: HttpResponse { status: 201, .. HttpResponse::default() },
+        .. SynchronousHttp::default() };
 
-      let interaction2 = RequestResponseInteraction { request: Request {
-          method: s!("PUT"),
-          body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
-          matching_rules: matchingrules!{
-              "body" => {
-                  "$.c" => [ MatchingRule::Integer ]
-              }
-          },
-          .. Request::default() },
-          response: Response { status: 201, .. Response::default() },
-          .. RequestResponseInteraction::default() };
+    let pact = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      let request1 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
-          .. Request::default() };
-      let request2 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 5, \"c\": 3}".as_bytes().into(), None),
-          .. Request::default() };
-      let request3 = Request { method: s!("PUT"), body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 16}".as_bytes().into(), None),
-          .. Request::default() };
-      let request4 = Request { method: s!("PUT"), headers: Some(hashmap!{ s!("Content-Type") => vec![s!("application/json")] }),
-          .. Request::default() };
+    let request1 = HttpRequest { method: "PUT".to_string(), body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None, None),
+        .. HttpRequest::default() };
+    let request2 = HttpRequest { method: "PUT".to_string(), body: OptionalBody::Present("{\"a\": 2, \"b\": 5, \"c\": 3}".as_bytes().into(), None, None),
+        .. HttpRequest::default() };
+    let request3 = HttpRequest { method: "PUT".to_string(), body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 16}".as_bytes().into(), None, None),
+        .. HttpRequest::default() };
+    let request4 = HttpRequest { method: "PUT".to_string(), headers: Some(hashmap!{ "Content-Type".to_string() => vec!["application/json".to_string()] }),
+        .. HttpRequest::default() };
 
-      expect!(super::find_matching_request(&request1, false, false,
-        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_ok());
-      expect!(super::find_matching_request(&request2, false, false,
-        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_err());
-      expect!(super::find_matching_request(&request3, false,
-        false, &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_ok());
-      expect!(super::find_matching_request(&request4, false, false,
-        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_ok());
-    }
+    expect!(super::find_matching_request(&request1, false, false, vec![pact.clone()], None, false).await).to(be_ok());
+    expect!(super::find_matching_request(&request2, false, false, vec![pact.clone()], None, false).await).to(be_err());
+    expect!(super::find_matching_request(&request3, false, false, vec![pact.clone()], None, false).await).to(be_ok());
+    expect!(super::find_matching_request(&request4, false, false, vec![pact], None, false).await).to(be_ok());
+  }
 
-    #[test]
-    fn match_request_returns_the_closest_match() {
-      let interaction1 = RequestResponseInteraction { request: Request {
-          body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None),
-          .. Request::default() },
-          response: Response { status: 200, .. Response::default() },
-          .. RequestResponseInteraction::default() };
+  #[tokio::test]
+  async fn match_request_returns_the_closest_match() {
+    let interaction1 = SynchronousHttp { request: HttpRequest {
+        body: OptionalBody::Present("{\"a\": 1, \"b\": 2, \"c\": 3}".as_bytes().into(), None, None),
+        .. HttpRequest::default() },
+        response: HttpResponse { status: 200, .. HttpResponse::default() },
+        .. SynchronousHttp::default() };
 
-      let interaction2 = RequestResponseInteraction { request: Request {
-          body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
-          .. Request::default() },
-          response: Response { status: 201, .. Response::default() },
-          .. RequestResponseInteraction::default() };
+    let interaction2 = SynchronousHttp { request: HttpRequest {
+        body: OptionalBody::Present("{\"a\": 2, \"b\": 4, \"c\": 6}".as_bytes().into(), None, None),
+        .. HttpRequest::default() },
+        response: HttpResponse { status: 201, .. HttpResponse::default() },
+        .. SynchronousHttp::default() };
 
-      let request1 = Request {
-          body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None),
-          .. Request::default() };
+    let pact = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      expect!(super::find_matching_request(&request1, false, false,
-        &vec![interaction1.clone(), interaction2.clone()], None, false)).to(be_ok().value(interaction2.response));
-    }
+    let request1 = HttpRequest {
+        body: OptionalBody::Present("{\"a\": 1, \"b\": 4, \"c\": 6}".as_bytes().into(), None, None),
+        .. HttpRequest::default() };
 
-    #[test]
-    fn with_auto_cors_return_200_with_an_option_request() {
-      let interaction1 = RequestResponseInteraction::default();
+    expect!(super::find_matching_request(&request1, false, false, vec![pact], None, false).await)
+      .to(be_ok().value(interaction2.response));
+  }
 
-      let request1 = Request {
-          method: s!("OPTIONS"),
-          .. Request::default() };
+  #[tokio::test]
+  async fn with_auto_cors_return_200_with_an_option_request() {
+    let interaction1 = SynchronousHttp::default();
+    let pact = V4Pact {
+      interactions: vec![ interaction1.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      expect!(super::find_matching_request(&request1, true, false,
-        &vec![interaction1.clone()], None, false)).to(be_ok());
-      expect!(super::find_matching_request(&request1, false, false,
-        &vec![interaction1.clone()], None, false)).to(be_err());
-    }
+    let request1 = HttpRequest {
+        method: "OPTIONS".to_string(),
+        .. HttpRequest::default() };
 
-    #[test]
-    fn match_request_with_query_params() {
-      let matching_rules = matchingrules!{
-          "query" => {
-              "page[0]" => [ MatchingRule::Type ]
-          }
-      };
-      let interaction1 = RequestResponseInteraction {
-          request: Request {
-              path: s!("/api/objects"),
-              query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
-              .. Request::default()
-          },
-          .. RequestResponseInteraction::default()
-      };
+    expect!(super::find_matching_request(&request1, true, false, vec![pact.clone()], None, false).await)
+      .to(be_ok());
+    expect!(super::find_matching_request(&request1, false, false, vec![pact], None, false).await)
+      .to(be_err());
+  }
 
-      let interaction2 = RequestResponseInteraction {
-          request: Request {
-              path: s!("/api/objects"),
-              query: Some(hashmap!{ s!("page") => vec![ s!("1") ] }),
-              matching_rules,
-              .. Request::default()
-          },
-          .. RequestResponseInteraction::default()
-      };
+  #[tokio::test]
+  async fn match_request_with_query_params() {
+    let matching_rules = matchingrules!{
+        "query" => {
+            "page[0]" => [ MatchingRule::Type ]
+        }
+    };
+    let interaction1 = SynchronousHttp {
+        request: HttpRequest {
+            path: "/api/objects".to_string(),
+            query: Some(hashmap!{ "page".to_string() => vec![ "1".to_string() ] }),
+            .. HttpRequest::default()
+        },
+        .. SynchronousHttp::default()
+    };
 
-      let request1 = Request {
-          path: s!("/api/objects"),
-          query: Some(hashmap!{ s!("page") => vec![ s!("3") ] }),
-          .. Request::default() };
+    let interaction2 = SynchronousHttp {
+        request: HttpRequest {
+            path: "/api/objects".to_string(),
+            query: Some(hashmap!{ "page".to_string() => vec![ "1".to_string() ] }),
+            matching_rules,
+            .. HttpRequest::default()
+        },
+        .. SynchronousHttp::default()
+    };
 
-      expect!(super::find_matching_request(&request1, false, false,
-        &vec![interaction1, interaction2], None, false)).to(be_ok());
-    }
+    let pact = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-    #[test]
-    fn match_request_filters_interactions_if_provider_state_filter_is_provided() {
-      let response1 = Response { status: 201, .. Response::default() };
-      let interaction1 = RequestResponseInteraction {
-          provider_states: vec![ ProviderState::default(&"state one".into()) ],
-          request: Request::default(),
-          response: Response { status: 201, .. Response::default() },
-          .. RequestResponseInteraction::default() };
+    let request1 = HttpRequest {
+        path: "/api/objects".to_string(),
+        query: Some(hashmap!{ "page".to_string() => vec![ "3".to_string() ] }),
+        .. HttpRequest::default() };
 
-      let response2 = Response { status: 202, .. Response::default() };
-      let interaction2 = RequestResponseInteraction {
-          provider_states: vec![ ProviderState::default(&"state two".into()) ],
-          request: Request::default(),
-          response: Response { status: 202, .. Response::default() },
-          .. RequestResponseInteraction::default() };
+    expect!(super::find_matching_request(&request1, false, false, vec![pact], None, false).await)
+      .to(be_ok());
+  }
 
-      let response3 = Response { status: 203, .. Response::default() };
-      let interaction3 = RequestResponseInteraction {
-          provider_states: vec![ ProviderState::default(&"state one".into()),
-                                 ProviderState::default(&"state two".into()),
-                                 ProviderState::default(&"state three".into()) ],
-          request: Request::default(),
-          response: Response { status: 203, .. Response::default() },
-          .. RequestResponseInteraction::default() };
-      let interaction4 = RequestResponseInteraction {
-        response: Response { status: 204, .. Response::default() },
-        .. RequestResponseInteraction::default() };
+  #[tokio::test]
+  async fn match_request_filters_interactions_if_provider_state_filter_is_provided() {
+    let response1 = HttpResponse { status: 201, .. HttpResponse::default() };
+    let interaction1 = SynchronousHttp {
+        provider_states: vec![ ProviderState::default("state one") ],
+        request: HttpRequest::default(),
+        response: HttpResponse { status: 201, .. HttpResponse::default() },
+        .. SynchronousHttp::default() };
 
-      let request = Request::default();
+    let response2 = HttpResponse { status: 202, .. HttpResponse::default() };
+    let interaction2 = SynchronousHttp {
+        provider_states: vec![ ProviderState::default("state two") ],
+        request: HttpRequest::default(),
+        response: HttpResponse { status: 202, .. HttpResponse::default() },
+        .. SynchronousHttp::default() };
 
-      expect!(super::find_matching_request(&request, false, false,
-        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
-        Some(Regex::new("state one").unwrap()), false)).to(be_ok().value(response1.clone()));
-      expect!(super::find_matching_request(&request, false, false,
-        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
-        Some(Regex::new("state two").unwrap()), false)).to(be_ok().value(response2.clone()));
-      expect!(super::find_matching_request(&request, false, false,
-        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
-        Some(Regex::new("state three").unwrap()), false)).to(be_ok().value(response3.clone()));
-      expect!(super::find_matching_request(&request, false, false,
-        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
-        Some(Regex::new("state four").unwrap()), false)).to(be_err());
-      expect!(super::find_matching_request(&request, false, false,
-        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone(), interaction4.clone()],
-        Some(Regex::new("state .*").unwrap()), false)).to(be_ok().value(response1.clone()));
-    }
+    let response3 = HttpResponse { status: 203, .. HttpResponse::default() };
+    let interaction3 = SynchronousHttp {
+        provider_states: vec![ ProviderState::default("state one"),
+                               ProviderState::default("state two"),
+                               ProviderState::default("state three") ],
+        request: HttpRequest::default(),
+        response: HttpResponse { status: 203, .. HttpResponse::default() },
+        .. SynchronousHttp::default() };
+    let interaction4 = SynchronousHttp {
+      response: HttpResponse { status: 204, .. HttpResponse::default() },
+      .. SynchronousHttp::default() };
 
-    #[test]
-    fn match_request_filters_interactions_if_provider_state_filter_is_provided_and_empty_values_included() {
-      let interaction1 = RequestResponseInteraction {
-        provider_states: vec![ ProviderState::default(&"state one".into()) ],
-        request: Request::default(),
-        response: Response { status: 201, .. Response::default() },
-        .. RequestResponseInteraction::default() };
+    let pact = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4(), interaction3.boxed_v4(), interaction4.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      let response2 = Response { status: 202, .. Response::default() };
-      let interaction2 = RequestResponseInteraction {
-        provider_states: vec![ ProviderState::default(&"".into()) ],
-        request: Request::default(),
-        response: Response { status: 202, .. Response::default() },
-        .. RequestResponseInteraction::default() };
+    let request = HttpRequest::default();
 
-      let response3 = Response { status: 203, .. Response::default() };
-      let interaction3 = RequestResponseInteraction {
-        request: Request::default(),
-        response: Response { status: 203, .. Response::default() },
-        .. RequestResponseInteraction::default() };
+    expect!(super::find_matching_request(&request, false, false, vec![pact.clone()],
+      Some(Regex::new("state one").unwrap()), false).await).to(be_ok().value(response1.clone()));
+    expect!(super::find_matching_request(&request, false, false, vec![pact.clone()],
+      Some(Regex::new("state two").unwrap()), false).await).to(be_ok().value(response2.clone()));
+    expect!(super::find_matching_request(&request, false, false, vec![pact.clone()],
+      Some(Regex::new("state three").unwrap()), false).await).to(be_ok().value(response3.clone()));
+    expect!(super::find_matching_request(&request, false, false, vec![pact.clone()],
+      Some(Regex::new("state four").unwrap()), false).await).to(be_err());
+    expect!(super::find_matching_request(&request, false, false, vec![pact.clone()],
+      Some(Regex::new("state .*").unwrap()), false).await).to(be_ok().value(response1.clone()));
+  }
 
-      let request = Request::default();
+  #[tokio::test]
+  async fn match_request_filters_interactions_if_provider_state_filter_is_provided_and_empty_values_included() {
+    let interaction1 = SynchronousHttp {
+      provider_states: vec![ ProviderState::default("state one") ],
+      request: HttpRequest::default(),
+      response: HttpResponse { status: 201, .. HttpResponse::default() },
+      .. SynchronousHttp::default() };
 
-      expect!(super::find_matching_request(&request, false, false,
-        &vec![interaction1.clone(), interaction2.clone(), interaction3.clone()],
-        Some(Regex::new("any state").unwrap()), true)).to(be_ok().value(response2.clone()));
+    let response2 = HttpResponse { status: 202, .. HttpResponse::default() };
+    let interaction2 = SynchronousHttp {
+      provider_states: vec![ ProviderState::default("") ],
+      request: HttpRequest::default(),
+      response: HttpResponse { status: 202, .. HttpResponse::default() },
+      .. SynchronousHttp::default() };
 
-      expect!(super::find_matching_request(&request, false, false,
-        &vec![interaction1.clone(), interaction3.clone()],
-        Some(Regex::new("any state").unwrap()), true)).to(be_ok().value(response3.clone()));
-    }
+    let response3 = HttpResponse { status: 203, .. HttpResponse::default() };
+    let interaction3 = SynchronousHttp {
+      request: HttpRequest::default(),
+      response: HttpResponse { status: 203, .. HttpResponse::default() },
+      .. SynchronousHttp::default() };
 
-    #[test]
-    fn handles_repeated_headers_values() {
-      let interaction = RequestResponseInteraction {
-          request: Request { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Z")] }),  .. Request::default() },
-          response: Response { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Y")] }), .. Response::default() },
-          .. RequestResponseInteraction::default() };
+    let pact1 = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction2.boxed_v4(), interaction3.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      let request = Request { headers: Some(hashmap!{ s!("TEST-X") => vec![s!("X, Y")] }), .. Request::default() };
+    let pact2 = V4Pact {
+      interactions: vec![ interaction1.boxed_v4(), interaction3.boxed_v4() ],
+      .. V4Pact::default()
+    };
 
-      let result = super::find_matching_request(&request, false, false,
-                                                &vec![interaction.clone()], None, false);
-      expect!(result).to(be_ok().value(interaction.response));
-    }
+    let request = HttpRequest::default();
+
+    expect!(super::find_matching_request(&request, false, false, vec![pact1],
+      Some(Regex::new("any state").unwrap()), true).await).to(be_ok().value(response2.clone()));
+
+    expect!(super::find_matching_request(&request, false, false, vec![pact2],
+      Some(Regex::new("any state").unwrap()), true).await).to(be_ok().value(response3.clone()));
+  }
+
+  #[tokio::test]
+  async fn handles_repeated_headers_values() {
+    let interaction = SynchronousHttp {
+        request: HttpRequest { headers: Some(hashmap!{ "TEST-X".to_string() => vec!["X, Z".to_string()] }),  .. HttpRequest::default() },
+        response: HttpResponse { headers: Some(hashmap!{ "TEST-X".to_string() => vec!["X, Y".to_string()] }), .. HttpResponse::default() },
+        .. SynchronousHttp::default() };
+    let pact = V4Pact {
+      interactions: vec![ interaction.boxed_v4() ],
+      .. V4Pact::default()
+    };
+
+    let request = HttpRequest { headers: Some(hashmap!{ "TEST-X".to_string() => vec!["X, Y".to_string()] }), .. HttpRequest::default() };
+
+    let result = super::find_matching_request(&request, false, false, vec![pact], None, false).await;
+    expect!(result).to(be_ok().value(interaction.response));
+  }
 }
