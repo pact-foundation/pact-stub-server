@@ -473,6 +473,85 @@ mod test {
       .to(be_ok());
   }
 
+  #[test_log::test(tokio::test)]
+  async fn match_request_with_repeated_query_params() {
+    let matching_rules = matchingrules!{
+        "query" => {
+            "ids" => [ MatchingRule::MinType(2) ],
+            "ids[*]" => [ MatchingRule::Type ]
+        }
+    };
+    let interaction = SynchronousHttp {
+      request: HttpRequest {
+        path: "/api".to_string(),
+        query: Some(hashmap!{
+          "ids".to_string() => vec![
+            "1".to_string(),
+            "2".to_string(),
+            "3".to_string(),
+            "4".to_string()
+          ]
+        }),
+        matching_rules,
+        .. HttpRequest::default()
+      },
+      .. SynchronousHttp::default()
+    };
+
+    let pact = V4Pact {
+      interactions: vec![ interaction.boxed_v4() ],
+      .. V4Pact::default()
+    };
+
+    let request1 = HttpRequest {
+      path: "/api".to_string(),
+      query: Some(hashmap!{ "ids".to_string() => vec![ "3".to_string() ] }),
+      .. HttpRequest::default() };
+    let request2 = HttpRequest {
+      path: "/api".to_string(),
+      query: Some(hashmap!{ "ids".to_string() => vec![ "3".to_string(), "1".to_string() ] }),
+      .. HttpRequest::default() };
+    let request3 = HttpRequest {
+      path: "/api".to_string(),
+      query: Some(hashmap!{ "ids".to_string() => vec![
+        "1".to_string(),
+        "2".to_string(),
+        "3".to_string(),
+        "4".to_string()
+      ] }),
+      .. HttpRequest::default() };
+    let request4 = HttpRequest {
+      path: "/api".to_string(),
+      query: Some(hashmap!{ "ids".to_string() => vec![
+        "id".to_string(),
+        "id".to_string(),
+        "id".to_string(),
+        "id".to_string()
+      ] }),
+      .. HttpRequest::default() };
+    let request5 = HttpRequest {
+      path: "/api".to_string(),
+      query: Some(hashmap!{ "ids".to_string() => vec![
+        "1".to_string(),
+        "2".to_string(),
+        "3".to_string(),
+        "4".to_string(),
+        "5".to_string()
+      ] }),
+      .. HttpRequest::default() };
+
+    expect!(super::find_matching_request(&request1, false, false, vec![pact.clone()], None, false).await)
+      .to(be_err());
+    expect!(super::find_matching_request(&request2, false, false, vec![pact.clone()], None, false).await)
+      .to(be_ok());
+    expect!(super::find_matching_request(&request3, false, false, vec![pact.clone()], None, false).await)
+      .to(be_ok());
+    expect!(super::find_matching_request(&request4, false, false, vec![pact.clone()], None, false).await)
+      .to(be_ok());
+    expect!(super::find_matching_request(&request5, false, false, vec![pact.clone()], None, false).await)
+      .to(be_ok());
+  }
+
   #[tokio::test]
   async fn match_request_filters_interactions_if_provider_state_filter_is_provided() {
     let response1 = HttpResponse { status: 201, .. HttpResponse::default() };
