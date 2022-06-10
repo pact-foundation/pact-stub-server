@@ -1,5 +1,11 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.5.1 - Bugfix Release
+
+* d864952 - fix: Upgrade pact_matching crate to 0.12.9 (fixes type matches with query parameters) #48 (Ronald Holshausen, Fri Jun 10 15:49:30 2022 +1000)
+* 62fd1ac - chore: update docker file (Ronald Holshausen, Wed Jun 8 16:17:13 2022 +1000)
+* bb60af3 - bump version to 0.5.1 (Ronald Holshausen, Wed Jun 8 15:54:02 2022 +1000)
+
 # 0.5.0 - Fixes + upgrade to V4 Pact
 
 * 2abfdcb - chore: update readme (Ronald Holshausen, Wed Jun 8 15:37:22 2022 +1000)
