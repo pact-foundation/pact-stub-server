@@ -1,0 +1,60 @@
+{
+  "provider": {
+    "name": "test_provider"
+  },
+  "consumer": {
+    "name": "test_consumer"
+  },
+  "interactions": [
+    {
+      "description": "test interaction",
+      "request": {
+        "method": "GET",
+        "path": "/endpoint"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "response": 1
+        }
+      }
+    },
+    {
+      "description": "test interaction - query 1",
+      "request": {
+        "method": "GET",
+        "path": "/endpoint",
+        "query": {
+          "type": "foo"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "response": 2
+        }
+      }
+    },
+    {
+      "description": "test interaction - query 2",
+      "request": {
+        "method": "GET",
+        "path": "/endpoint",
+        "query": {
+          "type": "bar"
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "response": 3
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  }
+}
