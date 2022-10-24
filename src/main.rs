@@ -290,7 +290,6 @@ fn build_args() -> Command {
     .arg(Arg::new("ext")
       .short('e')
       .long("extension")
-      .action(ArgAction::Append)
       .value_parser(clap::builder::NonEmptyStringValueParser::new())
       .requires("dir")
       .help("File extension to use when loading from a directory (default is json)"))
