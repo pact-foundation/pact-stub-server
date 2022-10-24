@@ -1,5 +1,20 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.5.2 - Support linux with glibc 2.18+ and aarch64 (ARM64) binaries
+
+* 2322656 - fix: file extension option should only be given once (Ronald Holshausen, Mon Oct 24 17:14:50 2022 +1100)
+* ab2c414 - chore: make the provider and consumer name parameters singular (Ronald Holshausen, Mon Oct 24 17:12:06 2022 +1100)
+* 5398be5 - chore: correct manifest homepage (Ronald Holshausen, Mon Oct 24 16:47:58 2022 +1100)
+* 2e4c46e - chore: update dep crates (Ronald Holshausen, Mon Oct 24 16:47:21 2022 +1100)
+* cbf1ebf - chore: add test with interactions with different query parameters (Ronald Holshausen, Mon Oct 24 16:21:07 2022 +1100)
+* c2be7b1 - chore: Add aarch64 (ARM64) binaries to the release build #50 (Ronald Holshausen, Mon Oct 24 15:19:46 2022 +1100)
+* 40c20ff - chore: Update main doc comment (Ronald Holshausen, Mon Oct 24 15:11:56 2022 +1100)
+* fde3606 - chore: Upgrade Clap to 4.0.x (Ronald Holshausen, Mon Oct 24 15:05:05 2022 +1100)
+* ca3c5d0 - fix: build linux executable with Debian Stretch (supports GLibC 2.18+) #39 (Ronald Holshausen, Mon Oct 24 11:28:37 2022 +1100)
+* 5bee6ed - chore: Update dependencies (Ronald Holshausen, Mon Oct 24 11:10:46 2022 +1100)
+* b9a81b2 - chore: add readme (Ronald Holshausen, Fri Jun 10 16:45:03 2022 +1000)
+* c7db05a - bump version to 0.5.2 (Ronald Holshausen, Fri Jun 10 16:24:42 2022 +1000)
+
 # 0.5.1 - Bugfix Release
 
 * d864952 - fix: Upgrade pact_matching crate to 0.12.9 (fixes type matches with query parameters) #48 (Ronald Holshausen, Fri Jun 10 15:49:30 2022 +1000)
