@@ -1,7 +1,6 @@
 # Standalone Pact Stub Server
 
 [![Build](https://github.com/uglyog/pact-stub-server/workflows/Build/badge.svg)](https://github.com/uglyog/pact-stub-server/actions?query=workflow%3ABuild)
-[![Windows Build status](https://ci.appveyor.com/api/projects/status/vigbo2qdyk9x7mo9?svg=true)](https://ci.appveyor.com/project/uglyog/pact-stub-server)
 
 This project provides a server that can generate responses based on pact files. It is a single executable binary. 
 It implements the [V4 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-4).
