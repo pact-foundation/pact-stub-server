@@ -30,13 +30,14 @@ fn validates_integer_value() {
     }
     quickcheck(prop as fn(_) -> _);
 
-    expect!(integer_value("1234")).to(be_ok());
+    expect!(integer_value("1234")).to(be_ok().value(1234));
     expect!(integer_value("1234x")).to(be_err());
 }
 
 #[test]
 fn validates_regex_value() {
     expect!(regex_value("1234")).to(be_ok());
+    expect!(regex_value("\\d+")).to(be_ok());
     expect!(regex_value("[")).to(be_err());
 }
 
