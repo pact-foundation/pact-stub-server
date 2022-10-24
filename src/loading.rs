@@ -119,7 +119,7 @@ async fn pact_from_url(
 pub async fn load_pacts(
   sources: Vec<PactSource>,
   insecure_tls: bool,
-  ext: Option<&str>
+  ext: Option<&String>
 ) -> Vec<Result<Box<dyn Pact + Send + Sync>, PactError>> {
   futures::stream::iter(sources)
     .then(| s| async move {
@@ -127,7 +127,7 @@ pub async fn load_pacts(
         PactSource::File(file) => vec![
           read_pact(Path::new(file)).map_err(PactError::from)
         ],
-        PactSource::Dir(dir) => match walkdir(Path::new(dir), ext.unwrap_or("json")) {
+        PactSource::Dir(dir) => match walkdir(Path::new(dir), ext.unwrap_or(&"json".to_string())) {
           Ok(pacts) => pacts,
           Err(err) => vec![Err(PactError::new(format!("Could not load pacts from directory '{}' - {}", dir, err)))]
         },
