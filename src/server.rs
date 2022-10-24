@@ -241,7 +241,7 @@ async fn handle_request(
   empty_provider_states: bool
 ) -> HttpResponse {
   info! ("===> Received {}", request);
-  debug!("     body: '{}'", request.body.str_value());
+  debug!("     body: '{}'", request.body.display_string());
   debug!("     matching_rules: {:?}", request.matching_rules);
   debug!("     generators: {:?}", request.generators);
   match find_matching_request(&request, auto_cors, cors_referrer, sources, provider_state,
