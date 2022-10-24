@@ -83,10 +83,10 @@ Options:
           Name of the header parameter containing the provider state to be used in case multiple matching interactions are found
       --empty-provider-state
           Include empty provider states when filtering with --provider-state
-      --consumer-names <consumer-names>
-          Consumer names to use to filter the Pacts fetched from the Pact broker
-      --provider-names <provider-names>
-          Provider names to use to filter the Pacts fetched from the Pact broker
+      --consumer-name <consumer-name>
+          Consumer name to use to filter the Pacts fetched from the Pact broker (can be repeated)
+      --provider-name <provider-name>
+          Provider name to use to filter the Pacts fetched from the Pact broker (can be repeated)
   -v, --version
           Print version information
   -h, --help

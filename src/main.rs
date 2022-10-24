@@ -46,10 +46,10 @@
 //!           Name of the header parameter containing the provider state to be used in case multiple matching interactions are found
 //!       --empty-provider-state
 //!           Include empty provider states when filtering with --provider-state
-//!       --consumer-names <consumer-names>
-//!           Consumer names to use to filter the Pacts fetched from the Pact broker
-//!       --provider-names <provider-names>
-//!           Provider names to use to filter the Pacts fetched from the Pact broker
+//!      --consumer-name <consumer-name>
+//!           Consumer name to use to filter the Pacts fetched from the Pact broker (can be repeated)
+//!       --provider-name <provider-name>
+//!           Provider name to use to filter the Pacts fetched from the Pact broker (can be repeated)
 //!   -v, --version
 //!           Print version information
 //!   -h, --help
@@ -184,10 +184,10 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
     sources.push(PactSource::Broker {
       url: url.to_string(),
       auth,
-      consumers: matches.get_many::<String>("consumer-names")
+      consumers: matches.get_many::<String>("consumer-name")
         .map(|v| v.map(ToString::to_string)
         .collect_vec()).unwrap_or_default(),
-      providers: matches.get_many::<String>("provider-names")
+      providers: matches.get_many::<String>("provider-name")
         .map(|v| v.map(ToString::to_string)
         .collect_vec()).unwrap_or_default()
     });
@@ -354,18 +354,20 @@ fn build_args() -> Command {
       .requires("provider-state")
       .action(ArgAction::SetTrue)
       .help("Include empty provider states when filtering with --provider-state"))
-    .arg(Arg::new("consumer-names")
-      .long("consumer-names")
+    .arg(Arg::new("consumer-name")
+      .long("consumer-name")
+      .alias("consumer-names")
       .requires("broker-url")
       .action(ArgAction::Append)
       .value_parser(clap::builder::NonEmptyStringValueParser::new())
-      .help("Consumer names to use to filter the Pacts fetched from the Pact broker"))
-    .arg(Arg::new("provider-names")
-      .long("provider-names")
+      .help("Consumer name to use to filter the Pacts fetched from the Pact broker (can be repeated)"))
+    .arg(Arg::new("provider-name")
+      .long("provider-name")
+      .alias("provider-names")
       .requires("broker-url")
       .action(ArgAction::Append)
       .value_parser(clap::builder::NonEmptyStringValueParser::new())
-      .help("Provider names to use to filter the Pacts fetched from the Pact broker"))
+      .help("Provider name to use to filter the Pacts fetched from the Pact broker (can be repeated)"))
     .arg(Arg::new("version")
       .short('v')
       .long("version")
