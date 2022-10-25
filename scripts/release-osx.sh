@@ -11,5 +11,5 @@ openssl dgst -sha256 -r target/artifacts/pact-stub-server-osx-x86_64.gz > target
 export SDKROOT=$(xcrun -sdk macosx12.1 --show-sdk-path)
 export MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx12.1 --show-sdk-platform-version)
 cargo build --target aarch64-apple-darwin --release
-gzip -c target/aarch64-apple-darwin/release/pact_verifier_cli > target/artifacts/pact-stub-server-osx-aarch64.gz
+gzip -c target/aarch64-apple-darwin/release/pact-stub-server > target/artifacts/pact-stub-server-osx-aarch64.gz
 openssl dgst -sha256 -r target/artifacts/pact-stub-server-osx-aarch64.gz > target/artifacts/pact-stub-server-osx-aarch64.gz.sha256
