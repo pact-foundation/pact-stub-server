@@ -1,5 +1,18 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.5.3 - add regex support with consumer/provider name filtering
+
+* 2229a40 - feat: correct retrieving regex values from CLI args #54 (Ronald Holshausen, Tue Apr 11 13:55:16 2023 +1000)
+* cb982da - feat: add regex support with consumer/provider name filtering #54 (Ronald Holshausen, Tue Apr 11 13:43:27 2023 +1000)
+* 4cea830 - chore: fix deprecation warnings (Ronald Holshausen, Tue Apr 11 12:07:23 2023 +1000)
+* 85bc42f - chore: Upgrade clap to latest 4.2 (Ronald Holshausen, Tue Apr 11 12:03:31 2023 +1000)
+* 1233cf8 - chore: add trycmd tests (Ronald Holshausen, Tue Apr 11 11:04:43 2023 +1000)
+* 6dfb360 - chore: Upgrade dependencies (Ronald Holshausen, Tue Apr 11 10:42:55 2023 +1000)
+* 257bd0f - chore: Update docker image to support multi-arch images (Ronald Holshausen, Tue Oct 25 12:48:12 2022 +1100)
+* b5b1ee2 - Merge branch 'release/0.5.2' (Ronald Holshausen, Tue Oct 25 11:48:26 2022 +1100)
+* c4fbdfd - chore: update release script (Ronald Holshausen, Mon Oct 24 17:49:38 2022 +1100)
+* 858193f - bump version to 0.5.3 (Ronald Holshausen, Mon Oct 24 17:45:42 2022 +1100)
+
 # 0.5.2 - Support linux with glibc 2.18+ and aarch64 (ARM64) binaries
 
 * 2322656 - fix: file extension option should only be given once (Ronald Holshausen, Mon Oct 24 17:14:50 2022 +1100)
