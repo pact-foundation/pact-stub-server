@@ -21,9 +21,9 @@ pact files.
 
 The pact stub server is bundled as a single binary executable `pact-stub-server`. Running this without any options displays the standard help.
 
-```console
-❯ pact-stub-server
-Pact Stub Server 0.5.2
+```console,ignore
+$ pact-stub-server
+Pact Stub Server 0.5.3
 
 Usage: pact-stub-server [OPTIONS]
 
@@ -65,7 +65,8 @@ Options:
   -v, --version
           Print version information
   -h, --help
-          Print help information
+          Print help
+
 ```
 
 ## Options
@@ -109,7 +110,7 @@ expression that is applied to all interactions before the requests are matched.
 
 For Pacts fetched from a Pact broker, you can filter the Pacts by the consumer and/or provider names using: 
 
-```
+```ignore
  --consumer-names <consumer-names>...
             Consumer names to use to filter the Pacts fetched from the Pact broker
             
@@ -131,7 +132,7 @@ A docker image is published to `pactfoundation/pact-stub-server`.
 
 Example of using it:
 
-```
+```console,ignore
 # Create a Stub API
 docker pull pactfoundation/pact-stub-server
 docker run -t -p 8080:8080 -v "$(pwd)/pacts/:/app/pacts" pactfoundation/pact-stub-server -p 8080 -d pacts
