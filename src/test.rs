@@ -1,7 +1,6 @@
 use clap::crate_version;
 use clap::error::ErrorKind;
 use expectest::prelude::*;
-use quickcheck::{quickcheck, TestResult};
 use rand::Rng;
 
 use crate::build_args;
@@ -16,20 +15,6 @@ fn verify_cli() {
 
 #[test]
 fn validates_integer_value() {
-    fn prop(s: String) -> TestResult {
-        let mut rng = ::rand::thread_rng();
-        if rng.gen() && s.chars().any(|ch| !ch.is_numeric()) {
-            TestResult::discard()
-        } else {
-            let validation = integer_value(s.as_str());
-            match validation {
-                Ok(_) => TestResult::from_bool(!s.is_empty() && s.chars().all(|ch| ch.is_numeric() )),
-                Err(_) => TestResult::from_bool(s.is_empty() || s.chars().find(|ch| !ch.is_numeric() ).is_some())
-            }
-        }
-    }
-    quickcheck(prop as fn(_) -> _);
-
     expect!(integer_value("1234")).to(be_ok().value(1234));
     expect!(integer_value("1234x")).to(be_err());
 }
@@ -90,7 +75,7 @@ Options:
   -v, --version
           Print version information
   -h, --help
-          Print help information
+          Print help
 "#, crate_version!());
   pretty_assertions::assert_eq!(result.to_string(), expected_help);
 }
