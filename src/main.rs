@@ -90,7 +90,6 @@ use std::str::FromStr;
 
 use clap::{Command, Arg, ArgMatches, ArgAction, command, crate_version};
 use clap::error::ErrorKind;
-use itertools::Itertools;
 use pact_models::prelude::*;
 use regex::Regex;
 use tracing::{debug, error, info, warn};
@@ -143,9 +142,9 @@ pub enum PactSource {
     /// Any required auth
     auth: Option<HttpAuth>,
     /// Consumer names to filter Pacts with
-    consumers: Vec<String>,
+    consumers: Vec<Regex>,
     /// Provider names to filter Pacts with
-    providers: Vec<String>
+    providers: Vec<Regex>
   }
 }
 
@@ -184,12 +183,8 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
     sources.push(PactSource::Broker {
       url: url.to_string(),
       auth,
-      consumers: matches.get_many::<String>("consumer-name")
-        .map(|v| v.map(ToString::to_string)
-        .collect_vec()).unwrap_or_default(),
-      providers: matches.get_many::<String>("provider-name")
-        .map(|v| v.map(ToString::to_string)
-        .collect_vec()).unwrap_or_default()
+      consumers: matches.get_many::<Regex>("consumer-name").unwrap_or_default().into_iter().cloned().collect(),
+      providers: matches.get_many::<Regex>("provider-name").unwrap_or_default().into_iter().cloned().collect()
     });
   }
 

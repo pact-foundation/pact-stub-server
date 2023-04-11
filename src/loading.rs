@@ -135,10 +135,6 @@ pub async fn load_pacts(
         },
         PactSource::URL(url, auth) => vec![ pact_from_url(url, auth, insecure_tls).await ],
         PactSource::Broker { url, auth, consumers, providers } => {
-          // Safe to unwrap here, as Clap would have validated the inputs
-          let consumers = consumers.iter().map(|name| Regex::new(name).unwrap()).collect();
-          let providers = providers.iter().map(|name| Regex::new(name).unwrap()).collect();
-
           let client = HALClient::with_url(url, auth.clone());
           match client.navigate("pb:latest-pact-versions", &hashmap!{}).await {
             Ok(client) => {
@@ -160,8 +156,8 @@ pub async fn load_pacts(
                           })
                       }
                     })
-                    .filter(|result| filter_consumers(&consumers, result))
-                    .filter(|result| filter_providers(&providers, result))
+                    .filter(|result| filter_consumers(consumers, result))
+                    .filter(|result| filter_providers(providers, result))
                     .collect().await
                 },
                 Err(err) => vec![Err(PactError::new(err.to_string()))]
