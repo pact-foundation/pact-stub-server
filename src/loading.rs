@@ -4,7 +4,8 @@ use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::Path;
 
-use base64::encode;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as Base64;
 use futures::future::ready;
 use futures::StreamExt;
 use maplit::hashmap;
@@ -101,9 +102,9 @@ async fn pact_from_url(
   if let Some(u) = auth {
     req = match u {
       HttpAuth::User(user, password) => if let Some(pass) = password {
-        req.header("Authorization", format!("Basic {}", encode(format!("{}:{}", user, pass))))
+        req.header("Authorization", format!("Basic {}", Base64.encode(format!("{}:{}", user, pass))))
       } else {
-        req.header("Authorization", format!("Basic {}", encode(user)))
+        req.header("Authorization", format!("Basic {}", Base64.encode(user)))
       },
       HttpAuth::Token(token) => req.header("Authorization", format!("Bearer {}", token)),
       _ => req.header("Authorization", "undefined"),

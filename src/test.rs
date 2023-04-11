@@ -1,7 +1,4 @@
-use clap::crate_version;
-use clap::error::ErrorKind;
 use expectest::prelude::*;
-use rand::Rng;
 
 use crate::build_args;
 
