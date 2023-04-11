@@ -6,12 +6,13 @@ use std::path::Path;
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as Base64;
-use futures::future::ready;
+use futures::future::{ready, Ready};
 use futures::StreamExt;
 use maplit::hashmap;
 use pact_models::pact::{load_pact_from_json, read_pact};
 use pact_models::prelude::*;
 use pact_verifier::pact_broker::HALClient;
+use regex::Regex;
 use serde_json::Value;
 use tracing::{debug, warn};
 
@@ -134,6 +135,10 @@ pub async fn load_pacts(
         },
         PactSource::URL(url, auth) => vec![ pact_from_url(url, auth, insecure_tls).await ],
         PactSource::Broker { url, auth, consumers, providers } => {
+          // Safe to unwrap here, as Clap would have validated the inputs
+          let consumers = consumers.iter().map(|name| Regex::new(name).unwrap()).collect();
+          let providers = providers.iter().map(|name| Regex::new(name).unwrap()).collect();
+
           let client = HALClient::with_url(url, auth.clone());
           match client.navigate("pb:latest-pact-versions", &hashmap!{}).await {
             Ok(client) => {
@@ -155,30 +160,8 @@ pub async fn load_pacts(
                           })
                       }
                     })
-                    .filter(|result| {
-                      match result {
-                        Ok(pact) => {
-                          if consumers.is_empty() {
-                            ready(true)
-                          } else {
-                            ready(consumers.contains(&pact.consumer().name))
-                          }
-                        }
-                        Err(_) => ready(true)
-                      }
-                    })
-                    .filter(|result| {
-                      match result {
-                        Ok(pact) => {
-                          if providers.is_empty() {
-                            ready(true)
-                          } else {
-                            ready(providers.contains(&pact.provider().name))
-                          }
-                        }
-                        Err(_) => ready(true)
-                      }
-                    })
+                    .filter(|result| filter_consumers(&consumers, result))
+                    .filter(|result| filter_providers(&providers, result))
                     .collect().await
                 },
                 Err(err) => vec![Err(PactError::new(err.to_string()))]
@@ -193,4 +176,141 @@ pub async fn load_pacts(
     .flatten()
     .collect()
     .await
+}
+
+fn filter_providers(providers: &Vec<Regex>, result: &Result<Box<dyn Pact + Send + Sync>, PactError>) -> Ready<bool> {
+  match result {
+    Ok(pact) => {
+      if providers.is_empty() {
+        ready(true)
+      } else {
+        let pact_name = pact.provider().name;
+        ready(providers.iter().any(|name| name.is_match(&pact_name)))
+      }
+    }
+    Err(_) => ready(true)
+  }
+}
+
+fn filter_consumers(consumers: &Vec<Regex>, result: &Result<Box<dyn Pact + Send + Sync>, PactError>) -> Ready<bool> {
+  match result {
+    Ok(pact) => {
+      if consumers.is_empty() {
+        ready(true)
+      } else {
+        let pact_name = pact.consumer().name;
+        ready(consumers.iter().any(|name| name.is_match(&pact_name)))
+      }
+    }
+    Err(_) => ready(true)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use expectest::prelude::*;
+  use pact_models::prelude::{Pact, RequestResponsePact};
+  use regex::Regex;
+
+  use crate::loading::{filter_consumers, filter_providers, PactError};
+
+  #[tokio::test]
+  async fn filter_consumers_with_error_result() {
+    let result = Err(PactError::new("test".to_string()));
+    let filter_result = filter_consumers(&vec![Regex::new("one").unwrap()], &result).await;
+    expect!(filter_result).to(be_true());
+  }
+
+  #[tokio::test]
+  async fn filter_consumers_with_no_consumers() {
+    let result = Ok(RequestResponsePact::default().boxed());
+    let filter_result = filter_consumers(&vec![], &result).await;
+    expect!(filter_result).to(be_true());
+  }
+
+  #[tokio::test]
+  async fn filter_consumers_with_no_matching_consumer_name() {
+    let result = Ok(RequestResponsePact::default().boxed());
+    let names = vec![
+      Regex::new("one").unwrap(),
+      Regex::new("two").unwrap(),
+      Regex::new("three").unwrap()
+    ];
+    let filter_result = filter_consumers(&names, &result).await;
+    expect!(filter_result).to(be_false());
+  }
+
+  #[tokio::test]
+  async fn filter_consumers_with_a_matching_consumer_name() {
+    let result = Ok(RequestResponsePact::default().boxed());
+    let names = vec![
+      Regex::new("one").unwrap(),
+      Regex::new("two").unwrap(),
+      Regex::new("default_consumer").unwrap()
+    ];
+    let filter_result = filter_consumers(&names, &result).await;
+    expect!(filter_result).to(be_true());
+  }
+
+  #[tokio::test]
+  async fn filter_consumers_with_a_matching_consumer_name_with_regex() {
+    let result = Ok(RequestResponsePact::default().boxed());
+    let names = vec![
+      Regex::new("one").unwrap(),
+      Regex::new("two").unwrap(),
+      Regex::new("\\w+_consumer").unwrap()
+    ];
+    let filter_result = filter_consumers(&names, &result).await;
+    expect!(filter_result).to(be_true());
+  }
+
+  #[tokio::test]
+  async fn filter_providers_with_error_result() {
+    let result = Err(PactError::new("test".to_string()));
+    let filter_result = filter_providers(&vec![Regex::new("one").unwrap()], &result).await;
+    expect!(filter_result).to(be_true());
+  }
+
+  #[tokio::test]
+  async fn filter_providers_with_no_providers() {
+    let result = Ok(RequestResponsePact::default().boxed());
+    let filter_result = filter_providers(&vec![], &result).await;
+    expect!(filter_result).to(be_true());
+  }
+
+  #[tokio::test]
+  async fn filter_providers_with_no_matching_provider_name() {
+    let result = Ok(RequestResponsePact::default().boxed());
+    let names = vec![
+      Regex::new("one").unwrap(),
+      Regex::new("two").unwrap(),
+      Regex::new("three").unwrap()
+    ];
+    let filter_result = filter_providers(&names, &result).await;
+    expect!(filter_result).to(be_false());
+  }
+
+  #[tokio::test]
+  async fn filter_providers_with_a_matching_provider_name() {
+    let result = Ok(RequestResponsePact::default().boxed());
+    let names = vec![
+      Regex::new("one").unwrap(),
+      Regex::new("two").unwrap(),
+      Regex::new("default_provider").unwrap()
+    ];
+    let filter_result = filter_providers(&names, &result).await;
+    expect!(filter_result).to(be_true());
+  }
+
+  #[tokio::test]
+  async fn filter_providers_with_a_matching_provider_name_with_regex() {
+    let result = Ok(RequestResponsePact::default().boxed());
+    let names = vec![
+      Regex::new("one").unwrap(),
+      Regex::new("two").unwrap(),
+      Regex::new("\\w+_provider").unwrap()
+    ];
+    let filter_result = filter_providers(&names, &result).await;
+    expect!(filter_result).to(be_true());
+  }
 }
