@@ -1,3 +1,4 @@
+use std::future::{Ready, ready};
 use std::pin::Pin;
 use std::process::ExitCode;
 
@@ -8,8 +9,9 @@ use futures::stream::StreamExt;
 use futures::task::{Context, Poll};
 use http::{Error, StatusCode};
 use hyper::{Body, Request as HyperRequest, Response as HyperResponse, Server};
+use hyper::server::conn::AddrStream;
 use itertools::Itertools;
-use maplit::*;
+use maplit::hashmap;
 use pact_matching::{CoreMatchingContext, DiffConfig, Mismatch};
 use pact_models::generators::GeneratorTestMode;
 use pact_models::prelude::*;
@@ -17,6 +19,8 @@ use pact_models::prelude::v4::*;
 use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
 use pact_models::v4::V4InteractionType;
 use regex::Regex;
+use tower::ServiceBuilder;
+use tower_http::trace::TraceLayer;
 use tower_service::Service;
 use tracing::{debug, error, info, warn};
 
@@ -30,6 +34,38 @@ pub struct ServerHandler {
   provider_state: Option<Regex>,
   provider_state_header_name: Option<String>,
   empty_provider_states: bool
+}
+
+#[derive(Clone)]
+struct ServerHandlerFactory {
+  inner: ServerHandler
+}
+
+impl ServerHandlerFactory {
+  pub fn new(handler: ServerHandler) -> Self {
+    ServerHandlerFactory {
+      inner: handler
+    }
+  }
+}
+
+impl Service<&AddrStream> for ServerHandlerFactory {
+  type Response = ServerHandler;
+  type Error = anyhow::Error;
+  type Future = Ready<Result<Self::Response, Self::Error>>;
+
+  fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    Poll::Ready(Ok(()))
+  }
+
+  fn call(&mut self, req: &AddrStream) -> Self::Future {
+    debug!("Accepting a new connection from {}", req.remote_addr());
+    let service = ServiceBuilder::new()
+      .layer(TraceLayer::new_for_http())
+      .service(self.inner.clone())
+      .into_inner();
+    ready(Ok(service))
+  }
 }
 
 impl ServerHandler {
@@ -55,13 +91,7 @@ impl ServerHandler {
     let addr = ([0, 0, 0, 0], port).into();
     match Server::try_bind(&addr) {
       Ok(builder) => {
-        let server = builder
-          .serve(hyper::service::make_service_fn(|_| {
-            let inner = self.clone();
-            async {
-              Ok::<_, hyper::Error>(inner)
-            }
-          }));
+        let server = builder.serve(ServerHandlerFactory::new(self));
         info!("Server started on port {}", server.local_addr().port());
         block_on(server).map_err(|err| {
           error!("error occurred scheduling server future on Tokio runtime: {}", err);
