@@ -71,16 +71,21 @@ impl From<anyhow::Error> for PactError {
   }
 }
 
-fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactError>>, PactError> {
+fn walkdir(
+  dir: &Path,
+  ext: &str,
+  s: &PactSource
+) -> Result<Vec<Result<(Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactSource), PactError>>, PactError> {
   let mut pacts = vec![];
   debug!("Scanning {:?}", dir);
   for entry in fs::read_dir(dir)? {
     let path = entry?.path();
     if path.is_dir() {
-      walkdir(&path, ext)?;
+      pacts.extend(walkdir(&path, ext, s)?);
     } else if path.extension().is_some() && path.extension().unwrap_or_default() == ext {
       debug!("Loading file '{:?}'", path);
       pacts.push(read_pact(&path)
+        .map(|p| (p, s.clone()))
         .map_err(|err| PactError::from(err).with_path(path.as_path())))
     }
   }
@@ -123,18 +128,22 @@ pub async fn load_pacts(
   sources: Vec<PactSource>,
   insecure_tls: bool,
   ext: Option<&String>
-) -> Vec<Result<Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactError>> {
+) -> Vec<Result<(Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactSource), PactError>> {
   futures::stream::iter(sources)
     .then(| s| async move {
       let values = match &s {
         PactSource::File(file) => vec![
-          read_pact(Path::new(file)).map_err(PactError::from)
+          read_pact(Path::new(file))
+            .map(|p| (p, s.clone()))
+            .map_err(PactError::from)
         ],
-        PactSource::Dir(dir) => match walkdir(Path::new(dir), ext.unwrap_or(&"json".to_string())) {
+        PactSource::Dir(dir) => match walkdir(Path::new(dir), ext.unwrap_or(&"json".to_string()), &s) {
           Ok(pacts) => pacts,
           Err(err) => vec![Err(PactError::new(format!("Could not load pacts from directory '{}' - {}", dir, err)))]
         },
-        PactSource::URL(url, auth) => vec![ pact_from_url(url, auth, insecure_tls).await ],
+        PactSource::URL(url, auth) => vec![
+          pact_from_url(url, auth, insecure_tls).await.map(|p| (p, s.clone()))
+        ],
         PactSource::Broker { url, auth, consumers, providers } => {
           let client = HALClient::with_url(url, auth.clone());
           match client.navigate("pb:latest-pact-versions", &hashmap!{}).await {
@@ -159,6 +168,7 @@ pub async fn load_pacts(
                     })
                     .filter(|result| filter_consumers(consumers, result))
                     .filter(|result| filter_providers(providers, result))
+                    .map(|result| result.map(|p| (p, s.clone())))
                     .collect().await
                 },
                 Err(err) => vec![Err(PactError::new(err.to_string()))]
@@ -167,6 +177,7 @@ pub async fn load_pacts(
             Err(err) => vec![Err(PactError::new(err.to_string()))]
           }
         }
+        PactSource::Unknown => vec![]
       };
       futures::stream::iter(values)
     })

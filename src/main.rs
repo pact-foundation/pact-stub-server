@@ -145,7 +145,9 @@ pub enum PactSource {
     consumers: Vec<Regex>,
     /// Provider names to filter Pacts with
     providers: Vec<Regex>
-  }
+  },
+  /// Source that is not known, only used for unit testing
+  Unknown
 }
 
 fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
@@ -221,10 +223,11 @@ async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
         let pacts = pacts.iter()
           .map(|result| {
             // Currently, as_v4_pact won't fail as it upgrades older formats to V4, so is safe to unwrap
-            result.as_ref().unwrap().as_v4_pact().unwrap()
+            let (p, s) = result.as_ref().unwrap();
+            (p.as_v4_pact().unwrap(), s.clone())
           })
           .collect::<Vec<_>>();
-        let interactions: usize = pacts.iter().map(|p| p.interactions.len()).sum();
+        let interactions: usize = pacts.iter().map(|(p, _)| p.interactions.len()).sum();
         info!("Loaded {} pacts ({} total interactions)", pacts.len(), interactions);
         let auto_cors = matches.get_flag("cors");
         let referer = matches.get_flag("cors-referer");
