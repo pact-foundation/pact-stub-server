@@ -17,9 +17,9 @@ exclude = [
 clap = { version = "4.2.1", features = ["env", "std", "cargo"] }
 serde = "1.0.137"
 serde_json = "1.0.81"
-pact_matching = "1.0.7"
-pact_verifier = "0.15.2"
-pact_models = "1.0.9"
+pact_matching = "~1.1.0"
+pact_verifier = "~1.0.0"
+pact_models = "~1.1.2"
 maplit = "1.0.2"
 itertools = "0.10.5"
 hyper = { version = "0.14.25", features = ["full"] }

@@ -2,6 +2,7 @@
 
 use std::fmt::{Display, Formatter};
 use std::fs;
+use std::panic::RefUnwindSafe;
 use std::path::Path;
 
 use base64::Engine;
@@ -70,7 +71,7 @@ impl From<anyhow::Error> for PactError {
   }
 }
 
-fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact + Send + Sync>, PactError>>, PactError> {
+fn walkdir(dir: &Path, ext: &str) -> Result<Vec<Result<Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactError>>, PactError> {
   let mut pacts = vec![];
   debug!("Scanning {:?}", dir);
   for entry in fs::read_dir(dir)? {
@@ -90,7 +91,7 @@ async fn pact_from_url(
   url: &str,
   auth: &Option<HttpAuth>,
   insecure_tls: bool
-) -> Result<Box<dyn Pact + Send + Sync>, PactError> {
+) -> Result<Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactError> {
   let client = if insecure_tls {
     warn!("Disabling TLS certificate validation");
     reqwest::Client::builder()
@@ -122,7 +123,7 @@ pub async fn load_pacts(
   sources: Vec<PactSource>,
   insecure_tls: bool,
   ext: Option<&String>
-) -> Vec<Result<Box<dyn Pact + Send + Sync>, PactError>> {
+) -> Vec<Result<Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactError>> {
   futures::stream::iter(sources)
     .then(| s| async move {
       let values = match &s {
@@ -174,7 +175,7 @@ pub async fn load_pacts(
     .await
 }
 
-fn filter_providers(providers: &Vec<Regex>, result: &Result<Box<dyn Pact + Send + Sync>, PactError>) -> Ready<bool> {
+fn filter_providers(providers: &Vec<Regex>, result: &Result<Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactError>) -> Ready<bool> {
   match result {
     Ok(pact) => {
       if providers.is_empty() {
@@ -188,7 +189,7 @@ fn filter_providers(providers: &Vec<Regex>, result: &Result<Box<dyn Pact + Send 
   }
 }
 
-fn filter_consumers(consumers: &Vec<Regex>, result: &Result<Box<dyn Pact + Send + Sync>, PactError>) -> Ready<bool> {
+fn filter_consumers(consumers: &Vec<Regex>, result: &Result<Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactError>) -> Ready<bool> {
   match result {
     Ok(pact) => {
       if consumers.is_empty() {
