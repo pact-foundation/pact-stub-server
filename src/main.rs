@@ -378,6 +378,7 @@ fn setup_logger(level: &str) {
     _ => LevelFilter::from_str(level).unwrap_or(LevelFilter::INFO)
   };
   let subscriber = FmtSubscriber::builder()
+    .compact()
     .with_max_level(log_level)
     .with_thread_names(true)
     .finish();

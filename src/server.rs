@@ -20,7 +20,8 @@ use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
 use pact_models::v4::V4InteractionType;
 use regex::Regex;
 use tower::ServiceBuilder;
-use tower_http::trace::TraceLayer;
+use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
+use tower_http::trace::{DefaultMakeSpan, Trace, TraceLayer};
 use tower_service::Service;
 use tracing::{debug, error, info, warn};
 
@@ -50,7 +51,7 @@ impl ServerHandlerFactory {
 }
 
 impl Service<&AddrStream> for ServerHandlerFactory {
-  type Response = ServerHandler;
+  type Response = Trace<ServerHandler, SharedClassifier<ServerErrorsAsFailures>>;
   type Error = anyhow::Error;
   type Future = Ready<Result<Self::Response, Self::Error>>;
 
@@ -61,9 +62,9 @@ impl Service<&AddrStream> for ServerHandlerFactory {
   fn call(&mut self, req: &AddrStream) -> Self::Future {
     debug!("Accepting a new connection from {}", req.remote_addr());
     let service = ServiceBuilder::new()
-      .layer(TraceLayer::new_for_http())
-      .service(self.inner.clone())
-      .into_inner();
+      .layer(TraceLayer::new_for_http()
+        .make_span_with(DefaultMakeSpan::new().include_headers(true)))
+      .service(self.inner.clone());
     ready(Ok(service))
   }
 }
