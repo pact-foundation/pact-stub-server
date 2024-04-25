@@ -1,2 +1,26 @@
-#!/bin/bash
-docker build --build-arg VERSION=$DOCKER_TAG . -t pactfoundation/pact-stub-server:v$DOCKER_TAG
+#!/bin/bash 
+set -e
+
+DOCKER_ORG=${DOCKER_ORG:-pactfoundation}
+DOCKER_IMAGE=${DOCKER_IMAGE:-pact-stub-server}
+DOCKER_ORG_AND_IMAGE="$DOCKER_ORG/$DOCKER_IMAGE"
+GITHUB_DOCKER_ORG_AND_IMAGE="ghcr.io/$(echo "$DOCKER_ORG_AND_IMAGE" | sed 's/pactfoundation/pact-foundation/')"
+DOCKER_TAG=$(echo "$DOCKER_TAG" | sed 's/^refs\/tags\/v//')
+# get latest release tag, if DOCKER_TAG still contains refs
+if [[ "${DOCKER_TAG}" =~ "refs"* ]]; then
+    LATEST_RELEASE=$(echo $(curl -s https://api.github.com/repos/pact-foundation/pact-stub-server/releases/latest | jq -r '.name') |  sed 's/v//') 
+    echo "defaulting DOCKER_TAG=$DOCKER_TAG to latest release $LATEST_RELEASE"
+    DOCKER_TAG=$LATEST_RELEASE
+fi
+
+echo "Building version $DOCKER_TAG"
+docker buildx create --name multiarch --use
+if [[ "$PUSH_IMAGE" == 'true' ]]; then
+    PUSH_CMD=' --push'
+fi
+
+docker buildx build -t $DOCKER_ORG_AND_IMAGE:$DOCKER_TAG --build-arg VERSION=$DOCKER_TAG --platform linux/amd64,linux/arm64$PUSH_CMD .
+docker buildx build -t $DOCKER_ORG_AND_IMAGE:latest --build-arg VERSION=$DOCKER_TAG --platform linux/amd64,linux/arm64$PUSH_CMD .
+
+docker buildx build -t $GITHUB_DOCKER_ORG_AND_IMAGE:$DOCKER_TAG --build-arg VERSION=$DOCKER_TAG --platform linux/amd64,linux/arm64$PUSH_CMD .
+docker buildx build -t $GITHUB_DOCKER_ORG_AND_IMAGE:latest --build-arg VERSION=$DOCKER_TAG --platform linux/amd64,linux/arm64$PUSH_CMD .
