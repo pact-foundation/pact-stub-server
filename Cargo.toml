@@ -44,3 +44,14 @@ pretty_assertions = "1.3.0"
 test-log = "0.2.11"
 env_logger = "0.10.0"
 trycmd = "0.14.16"
+
+[profile.release]
+strip = true
+opt-level = "z" 
+codegen-units = 1
+lto = true
+
+# References
+# https://doc.rust-lang.org/stable/rustc/codegen-options/
+# https://doc.rust-lang.org/rustc/profile-guided-optimization.html
+# https://github.com/johnthagen/min-sized-rust
