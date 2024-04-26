@@ -36,8 +36,6 @@ jobs:
 
       - name: Rust caching
         uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: rust
 
       - name: Set up QEMU
         if: runner.os == 'Linux'
