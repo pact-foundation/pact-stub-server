@@ -1,5 +1,11 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.6.0 - Feature Release
+
+* 9387eb1 - chore(ci): remove cache workspace subdir (Yousaf Nabi, Fri Apr 26 15:49:13 2024 +0100)
+* 2325de3 - feat: reduce executable size (Yousaf Nabi, Thu Apr 25 19:06:53 2024 +0100)
+* efa86ca - feat: linux musl static bins / windows aarch64 (Yousaf Nabi, Thu Apr 25 17:56:00 2024 +0100)
+
 # 0.5.3 - add regex support with consumer/provider name filtering
 
 * 2229a40 - feat: correct retrieving regex values from CLI args #54 (Ronald Holshausen, Tue Apr 11 13:55:16 2023 +1000)
