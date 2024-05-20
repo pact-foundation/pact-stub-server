@@ -10,8 +10,8 @@ It implements the [V4 Pact specification](https://github.com/pact-foundation/pac
 [![pulls](https://badgen.net/docker/pulls/pactfoundation/pact-stub-server?icon=docker&label=pulls)](https://hub.docker.com/r/pactfoundation/pact-stub-server)
 [![stars](https://badgen.net/docker/stars/pactfoundation/pact-stub-server?icon=docker&label=stars)](https://hub.docker.com/r/pactfoundation/pact-stub-server)
 
-[![size: amd64](https://badgen.net/docker/size/pactfoundation/pact-stub-server/latest/amd64?icon=docker&label=size%3Aamd64)](https://hub.docker.com/r/pactfoundation/pact-cli)
-[![size: arm64](https://badgen.net/docker/size/pactfoundation/pact-stub-server/latest/arm64?icon=docker&label=size%3Aarm64)](https://hub.docker.com/r/pactfoundation/pact-cli)
+[![size: amd64](https://badgen.net/docker/size/pactfoundation/pact-stub-server/latest/amd64?icon=docker&label=size%3Aamd64)](https://hub.docker.com/r/pactfoundation/pact-stub-server)
+[![size: arm64](https://badgen.net/docker/size/pactfoundation/pact-stub-server/latest/arm64?icon=docker&label=size%3Aarm64)](https://hub.docker.com/r/pactfoundation/pact-stub-server)
 
 The stub server works by taking all the interactions (requests and responses) from a number of pact files. 
 For each interaction, it will compare any incoming request against those defined in the pact files. If there is a match 
