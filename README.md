@@ -164,7 +164,7 @@ Multi-platform images are available, and can be used cross-platform by setting t
 Docker images are published to multiple registries 
 
 - [DockerHub Image](https://hub.docker.com/r/pactfoundation/pact-stub-server)
-- [GithHub Container Image](https://github.com/pact-foundation/pact-stub-server/pkgs/container/pact-stub-server)
+- [GitHub Container Image](https://github.com/pact-foundation/pact-stub-server/pkgs/container/pact-stub-server)
 
 #### Docker - DockerHub
 
