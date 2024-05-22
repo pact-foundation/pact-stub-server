@@ -5,9 +5,13 @@
 This project provides a server that can generate responses based on pact files. It is a single executable binary. 
 It implements the [V4 Pact specification](https://github.com/pact-foundation/pact-specification/tree/version-4).
 
-[Docker Image](https://hub.docker.com/r/pactfoundation/pact-stub-server)
-
 [Online rust docs](https://docs.rs/crate/pact-stub-server)
+
+[![pulls](https://badgen.net/docker/pulls/pactfoundation/pact-stub-server?icon=docker&label=pulls)](https://hub.docker.com/r/pactfoundation/pact-stub-server)
+[![stars](https://badgen.net/docker/stars/pactfoundation/pact-stub-server?icon=docker&label=stars)](https://hub.docker.com/r/pactfoundation/pact-stub-server)
+
+[![size: amd64](https://badgen.net/docker/size/pactfoundation/pact-stub-server/latest/amd64?icon=docker&label=size%3Aamd64)](https://hub.docker.com/r/pactfoundation/pact-stub-server)
+[![size: arm64](https://badgen.net/docker/size/pactfoundation/pact-stub-server/latest/arm64?icon=docker&label=size%3Aarm64)](https://hub.docker.com/r/pactfoundation/pact-stub-server)
 
 The stub server works by taking all the interactions (requests and responses) from a number of pact files. 
 For each interaction, it will compare any incoming request against those defined in the pact files. If there is a match 
@@ -126,9 +130,11 @@ The running server can be controlled with the following options:
 |--------|-------------|
 | `-p, --port <port>` | The port to bind to. If not specified, a random port will be allocated by the operating system. |
 
-## Running with docker
+## Docker
 
-A docker image is published to `pactfoundation/pact-stub-server`.
+### Usage 
+
+Docker images are published to official registries, see [here](#docker---supported-registries)
 
 Example of using it:
 
@@ -141,3 +147,52 @@ docker run -t -p 8080:8080 -v "$(pwd)/pacts/:/app/pacts" pactfoundation/pact-stu
 curl -v $(docker-machine ip $(docker-machine active)):8080/bazbat
 curl -v $(docker-machine ip $(docker-machine active)):8080/foobar
 ```
+
+### Docker - Supported Platforms
+
+Multi-platform images are available, and can be used cross-platform by setting the `platform` flag.
+
+- `--platform=linux/amd64` 
+- `--platform=linux/arm64` 
+
+```console,ignore
+  docker run --platform=linux/arm64 -t -p 8080:8080 -v "$(pwd)/pacts/:/app/pacts" pactfoundation/pact-stub-server -p 8080 -d pacts
+```
+
+### Docker - Supported Registries
+
+Docker images are published to multiple registries 
+
+- [DockerHub Image](https://hub.docker.com/r/pactfoundation/pact-stub-server)
+- [GitHub Container Image](https://github.com/pact-foundation/pact-stub-server/pkgs/container/pact-stub-server)
+
+#### Docker - DockerHub
+
+```console,ignore
+  docker pull pactfoundation/pact-stub-server
+```
+
+#### Docker - GitHub Container Registry
+
+```console,ignore
+  docker pull ghcr.io/pact-foundation/pact-stub-server
+```
+
+## Compatibility
+
+<details><summary>Supported Platforms</summary>
+
+| OS      | Architecture | Supported  | Pact Stub Server Version |
+| ------- | ------------ | ---------  | ---------------- |
+| OSX     | x86_64       | ✅         | All              |
+| Linux   | x86_64       | ✅         | All              |
+| Windows | x86_64       | ✅         | All              |
+| OSX     | arm64        | ✅         | >=0.5.2          |
+| Linux   | arm64        | ✅         | >=0.5.2          |
+| Windows | arm64        | ✅         | >=0.6.0          |
+| Alpine  | x86_64       | ✅         | >=0.6.0          |
+| Alpine  | arm64        | ✅         | >=0.6.0          |
+
+_Note:_ From v0.6.0, Linux executables are statically built with `musl` and as designed to work against `glibc` (eg, Debian) and `musl` (eg, Alpine) based distos.
+
+</details>
