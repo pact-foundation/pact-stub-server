@@ -22,7 +22,7 @@ jobs:
             targets: x86_64-unknown-linux-gnu,x86_64-unknown-linux-musl,aarch64-unknown-linux-gnu,aarch64-unknown-linux-musl
           - operating-system: windows-2019
             targets: aarch64-pc-windows-msvc,x86_64-pc-windows-msvc
-          - operating-system: macos-12
+          - operating-system: macos-13
             targets: aarch64-apple-darwin,x86_64-apple-darwin
       fail-fast: false
     steps:
