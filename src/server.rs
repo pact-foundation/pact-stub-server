@@ -1,6 +1,7 @@
 use std::future::{Ready, ready};
 use std::pin::Pin;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use futures::executor::block_on;
@@ -12,6 +13,7 @@ use hyper::{Body, Request as HyperRequest, Response as HyperResponse, Server};
 use hyper::server::conn::AddrStream;
 use itertools::Itertools;
 use maplit::hashmap;
+use notify::Event;
 use pact_matching::{CoreMatchingContext, DiffConfig, Mismatch};
 use pact_models::generators::GeneratorTestMode;
 use pact_models::prelude::*;
@@ -19,6 +21,7 @@ use pact_models::prelude::v4::*;
 use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
 use pact_models::v4::V4InteractionType;
 use regex::Regex;
+use tokio::sync::broadcast::{Receiver, Sender};
 use tower::ServiceBuilder;
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::{DefaultMakeSpan, Trace, TraceLayer};
@@ -39,13 +42,15 @@ pub struct ServerHandler {
 
 #[derive(Clone)]
 struct ServerHandlerFactory {
-  inner: ServerHandler
+  inner: ServerHandler,
+  watch_tx: Option<Sender<Event>>
 }
 
 impl ServerHandlerFactory {
-  pub fn new(handler: ServerHandler) -> Self {
+  pub fn new(handler: ServerHandler, watch_tx: Option<Sender<Event>>) -> Self {
     ServerHandlerFactory {
-      inner: handler
+      inner: handler,
+      watch_tx
     }
   }
 }
@@ -84,15 +89,16 @@ impl ServerHandler {
       cors_referer,
       provider_state,
       provider_state_header_name,
-      empty_provider_states
+      empty_provider_states,
+      watch_rx: None
     }
   }
 
-  pub fn start_server(self, port: u16) -> Result<(), ExitCode> {
+  pub fn start_server(self, port: u16, watch_tx: Option<Sender<Event>>) -> Result<(), ExitCode> {
     let addr = ([0, 0, 0, 0], port).into();
     match Server::try_bind(&addr) {
       Ok(builder) => {
-        let server = builder.serve(ServerHandlerFactory::new(self));
+        let server = builder.serve(ServerHandlerFactory::new(self, watch_tx));
         info!("Server started on port {}", server.local_addr().port());
         block_on(server).map_err(|err| {
           error!("error occurred scheduling server future on Tokio runtime: {}", err);
@@ -126,6 +132,11 @@ impl Service<HyperRequest<Body>> for ServerHandler {
     let empty_provider_states = self.empty_provider_states;
 
     Box::pin(async move {
+
+      if let Some(rx) = self.watch_rx.as_mut() {
+        dbg!(rx.recv().await).expect("TODO: panic message");
+      }
+
       let (parts, body) = req.into_parts();
       let provider_state = match provider_state_header_name {
         Some(name) => {

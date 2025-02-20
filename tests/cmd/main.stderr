@@ -39,5 +39,7 @@ Options:
           Provider name or regex to use to filter the Pacts fetched from the Pact broker (can be repeated)
   -v, --version
           Print version information
+  -w, --watch
+          Watch files and directories for changes
   -h, --help
           Print help

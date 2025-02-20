@@ -85,13 +85,16 @@
 #![warn(missing_docs)]
 
 use std::env;
+use std::path::Path;
 use std::process::ExitCode;
 use std::str::FromStr;
 
 use clap::{Command, Arg, ArgMatches, ArgAction, command, crate_version};
 use clap::error::ErrorKind;
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use pact_models::prelude::*;
 use regex::Regex;
+use tokio::sync::broadcast::{channel, Sender};
 use tracing::{debug, error, info, warn};
 use tracing_core::LevelFilter;
 use tracing_subscriber::FmtSubscriber;
@@ -202,7 +205,7 @@ async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
       setup_logger(level.as_str());
       let sources = pact_source(matches);
 
-      let pacts = load_pacts(sources, matches.get_flag("insecure-tls"),
+      let pacts = load_pacts(&sources, matches.get_flag("insecure-tls"),
         matches.get_one("ext")).await;
       if pacts.iter().any(|p| p.is_err()) {
         error!("There were errors loading the pact files.");
@@ -231,15 +234,18 @@ async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
         info!("Loaded {} pacts ({} total interactions)", pacts.len(), interactions);
         let auto_cors = matches.get_flag("cors");
         let referer = matches.get_flag("cors-referer");
+        let watch_tx = setup_file_watch(matches.get_flag("watch"), &sources)
+          .map_err(|_| ExitCode::from(4))?;
         let server_handler = ServerHandler::new(
           pacts,
           auto_cors,
           referer,
           provider_state,
           provider_state_header_name,
-          empty_provider_states);
+          empty_provider_states
+        );
         tokio::task::spawn_blocking(move || {
-          server_handler.start_server(port)
+          server_handler.start_server(port, watch_tx)
         }).await.unwrap()
       }
     },
@@ -257,6 +263,43 @@ async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
         _ => err.exit()
       }
     }
+  }
+}
+
+fn setup_file_watch(watch_fs: bool, sources: &Vec<PactSource>) -> anyhow::Result<Option<Sender<Event>>> {
+  if watch_fs {
+    debug!("Enabling watching of files and directories");
+    let (tx, _rx) = channel(16);
+    let tx2 = tx.clone();
+    let mut watcher = RecommendedWatcher::new(move |event| {
+      match event {
+        Ok(event) => {
+          debug!("Got FS event {:?}", event);
+          if let Err(err) = tx.send(event) {
+            error!("Failed to send FS notify event: {}", err);
+          }
+        }
+        Err(err) => {
+          error!("Failed to get FS event: {}", err);
+        }
+      }
+    }, notify::Config::default())?;
+    for source in sources {
+      match source {
+        PactSource::File(f) => {
+          debug!("Watching file '{}'", f);
+          watcher.watch(Path::new(f.as_str()), RecursiveMode::NonRecursive)?
+        },
+        PactSource::Dir(d) => {
+          debug!("Watching directory '{}'", d);
+          watcher.watch(Path::new(d.as_str()), RecursiveMode::Recursive)?
+        },
+        _ => ()
+      };
+    }
+    Ok(Some(tx2))
+  } else {
+    Ok(None)
   }
 }
 
@@ -370,6 +413,11 @@ fn build_args() -> Command {
       .long("version")
       .action(ArgAction::Version)
       .help("Print version information"))
+    .arg(Arg::new("watch")
+      .short('w')
+      .long("watch")
+      .action(ArgAction::SetTrue)
+      .help("Watch files and directories for changes"))
 }
 
 fn setup_logger(level: &str) {

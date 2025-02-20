@@ -125,7 +125,7 @@ async fn pact_from_url(
 
 /// Load all the pact files from the provided sources
 pub async fn load_pacts(
-  sources: Vec<PactSource>,
+  sources: &Vec<PactSource>,
   insecure_tls: bool,
   ext: Option<&String>
 ) -> Vec<Result<(Box<dyn Pact + Send + Sync + RefUnwindSafe>, PactSource), PactError>> {
