@@ -90,6 +90,7 @@ use std::str::FromStr;
 
 use clap::{Command, Arg, ArgMatches, ArgAction, command, crate_version};
 use clap::error::ErrorKind;
+use mimalloc::MiMalloc;
 use pact_models::prelude::*;
 use regex::Regex;
 use tracing::{debug, error, info, warn};
@@ -102,6 +103,9 @@ use crate::server::ServerHandler;
 mod pact_support;
 mod server;
 mod loading;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() -> Result<(), ExitCode> {

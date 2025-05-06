@@ -22,6 +22,7 @@ http = "0.2.9"
 hyper = { version = "0.14.26", features = ["full"] }
 itertools = "0.10.5"
 maplit = "1.0.2"
+mimalloc = "0.1.46"
 pact_matching = "~1.1.0"
 pact_verifier = "~1.0.0"
 pact_models = "~1.1.2"
