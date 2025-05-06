@@ -1,6 +1,7 @@
 use std::future::{Ready, ready};
 use std::pin::Pin;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use anyhow::anyhow;
 use futures::executor::block_on;
@@ -29,6 +30,10 @@ use crate::{pact_support, PactSource};
 
 #[derive(Clone)]
 pub struct ServerHandler {
+  shared: Arc<Shared>,
+}
+
+pub struct Shared {
   sources: Vec<(V4Pact, PactSource)>,
   auto_cors: bool,
   cors_referer: bool,
@@ -45,7 +50,7 @@ struct ServerHandlerFactory {
 impl ServerHandlerFactory {
   pub fn new(handler: ServerHandler) -> Self {
     ServerHandlerFactory {
-      inner: handler
+      inner: handler,
     }
   }
 }
@@ -79,12 +84,14 @@ impl ServerHandler {
     empty_provider_states: bool
   ) ->  ServerHandler {
     ServerHandler {
-      sources,
-      auto_cors,
-      cors_referer,
-      provider_state,
-      provider_state_header_name,
-      empty_provider_states
+      shared: Arc::new(Shared {
+        sources,
+        auto_cors,
+        cors_referer,
+        provider_state,
+        provider_state_header_name,
+        empty_provider_states
+      })
     }
   }
 
@@ -118,12 +125,13 @@ impl Service<HyperRequest<Body>> for ServerHandler {
   }
 
   fn call(&mut self, req: HyperRequest<Body>) -> Self::Future {
-    let auto_cors = self.auto_cors;
-    let cors_referer = self.cors_referer;
-    let sources = self.sources.clone();
-    let provider_state = self.provider_state.clone();
-    let provider_state_header_name = self.provider_state_header_name.clone();
-    let empty_provider_states = self.empty_provider_states;
+    let shared = self.shared.as_ref();
+    let auto_cors = shared.auto_cors;
+    let cors_referer = shared.cors_referer;
+    let sources = shared.sources.clone();
+    let provider_state = shared.provider_state.clone();
+    let provider_state_header_name = shared.provider_state_header_name.clone();
+    let empty_provider_states = shared.empty_provider_states;
 
     Box::pin(async move {
       let (parts, body) = req.into_parts();
