@@ -2,7 +2,7 @@
 name = "pact-stub-server"
 version = "0.6.2"
 edition = "2021"
-authors = ["Ronald Holshausen <uglyog@gmail.com>"]
+authors = ["Ronald Holshausen <ronald.holshausen@gmail.com>"]
 description = "Standalone pact stub server"
 homepage = "https://www.pact.io"
 repository = "https://github.com/uglyog/pact-stub-server"
