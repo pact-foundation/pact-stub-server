@@ -1,5 +1,15 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.6.1 - Performance Improvements
+
+* 7188299 - perf: Use MiMalloc as global allocator to improve performance (Stefan Ansing, Tue May 6 16:15:21 2025 +0200)
+* ef0e8e4 - perf: Move shared data into Arc (Stefan Ansing, Tue May 6 16:12:28 2025 +0200)
+* 43437ac - chore(ci): upgrade macos-12 to macos-13 (JP-Ellis, Fri Dec 6 09:33:47 2024 +1100)
+* c5383f4 - chore(docs): typo in link name (Yousaf Nabi, Mon May 20 13:14:27 2024 +0100)
+* bc78875 - chore(docs): update badge link to correct repo (Yousaf Nabi, Mon May 20 13:13:33 2024 +0100)
+* 7772232 - docs: docker/binary compatibility notes (Yousaf Nabi, Mon May 20 13:12:37 2024 +0100)
+* 7a7094b - bump version to 0.6.1 (Yousaf Nabi, Fri May 10 16:23:21 2024 +0100)
+
 # 0.6.0 - Feature Release
 
 * 9387eb1 - chore(ci): remove cache workspace subdir (Yousaf Nabi, Fri Apr 26 15:49:13 2024 +0100)
