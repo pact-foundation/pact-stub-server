@@ -213,21 +213,25 @@ async fn find_matching_request(
   // Match all interactions from the sublist against the incoming request
   let results = futures::stream::iter(interactions)
     .filter_map(|(i, pact)| async move {
-      let result = pact_matching::match_request(i.request.clone(), request.clone(), &pact.boxed(), &i.boxed()).await;
-      let mismatches = result.mismatches();
-      let all_matched = mismatches.iter().all(|mismatch|{
-        match mismatch {
-          Mismatch::MethodMismatch { .. } => false,
-          Mismatch::PathMismatch { .. } => false,
-          Mismatch::QueryMismatch { .. } => false,
-          Mismatch::BodyMismatch { .. } => !(method_supports_payload(request) && request.body.is_present()),
-          _ => true
+      match pact_matching::match_request(i.request.clone(), request.clone(), &pact.boxed(), &i.boxed()).await {
+        Ok(result) => {
+          let mismatches = result.mismatches();
+          let all_matched = mismatches.iter().all(|mismatch|{
+            match mismatch {
+              Mismatch::MethodMismatch { .. } => false,
+              Mismatch::PathMismatch { .. } => false,
+              Mismatch::QueryMismatch { .. } => false,
+              Mismatch::BodyMismatch { .. } => !(method_supports_payload(request) && request.body.is_present()),
+              _ => true
+            }
+          });
+          if all_matched {
+            Some((i.clone(), mismatches.clone()))
+          } else {
+            None
+          }
         }
-      });
-      if all_matched {
-        Some((i.clone(), mismatches.clone()))
-      } else {
-        None
+        Err(_) => None
       }
     })
     .collect::<Vec<_>>()
