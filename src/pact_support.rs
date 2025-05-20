@@ -12,7 +12,7 @@ use pact_models::query_strings::parse_query_string;
 use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
 use tracing::{debug, info, warn};
 
-fn extract_query_string(uri: &Uri) -> Option<HashMap<String, Vec<String>>> {
+fn extract_query_string(uri: &Uri) -> Option<HashMap<String, Vec<Option<String>>>> {
     match uri.query() {
         Some(q) => parse_query_string(q),
         None => None

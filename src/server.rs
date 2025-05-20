@@ -368,7 +368,7 @@ mod test {
   #[tokio::test]
   async fn match_request_excludes_requests_with_different_query_params() {
     let interaction1 = SynchronousHttp { request: HttpRequest {
-        query: Some(hashmap!{ "A".to_string() => vec![ "B".to_string() ] }),
+        query: Some(hashmap!{ "A".to_string() => vec![ Some("B".to_string()) ] }),
         .. HttpRequest::default() }, .. SynchronousHttp::default() };
     let interaction2 = SynchronousHttp::default();
     let pact = V4Pact {
@@ -377,7 +377,7 @@ mod test {
     };
 
     let request1 = HttpRequest {
-        query: Some(hashmap!{ "A".to_string() => vec![ "C".to_string() ] }),
+        query: Some(hashmap!{ "A".to_string() => vec![ Some("C".to_string()) ] }),
         .. HttpRequest::default() };
 
     expect!(super::find_matching_request(&request1, false, false, vec![(pact, PactSource::Unknown)], None, false).await)
@@ -484,7 +484,7 @@ mod test {
     let interaction1 = SynchronousHttp {
         request: HttpRequest {
             path: "/api/objects".to_string(),
-            query: Some(hashmap!{ "page".to_string() => vec![ "1".to_string() ] }),
+            query: Some(hashmap!{ "page".to_string() => vec![ Some("1".to_string()) ] }),
             .. HttpRequest::default()
         },
         .. SynchronousHttp::default()
@@ -493,7 +493,7 @@ mod test {
     let interaction2 = SynchronousHttp {
         request: HttpRequest {
             path: "/api/objects".to_string(),
-            query: Some(hashmap!{ "page".to_string() => vec![ "1".to_string() ] }),
+            query: Some(hashmap!{ "page".to_string() => vec![ Some("1".to_string()) ] }),
             matching_rules,
             .. HttpRequest::default()
         },
@@ -507,7 +507,7 @@ mod test {
 
     let request1 = HttpRequest {
         path: "/api/objects".to_string(),
-        query: Some(hashmap!{ "page".to_string() => vec![ "3".to_string() ] }),
+        query: Some(hashmap!{ "page".to_string() => vec![ Some("3".to_string()) ] }),
         .. HttpRequest::default() };
 
     expect!(super::find_matching_request(&request1, false, false, vec![(pact, PactSource::Unknown)], None, false).await)
@@ -527,10 +527,10 @@ mod test {
         path: "/api".to_string(),
         query: Some(hashmap!{
           "ids".to_string() => vec![
-            "1".to_string(),
-            "2".to_string(),
-            "3".to_string(),
-            "4".to_string()
+            Some("1".to_string()),
+            Some("2".to_string()),
+            Some("3".to_string()),
+            Some("4".to_string())
           ]
         }),
         matching_rules,
@@ -546,38 +546,38 @@ mod test {
 
     let request1 = HttpRequest {
       path: "/api".to_string(),
-      query: Some(hashmap!{ "ids".to_string() => vec![ "3".to_string() ] }),
+      query: Some(hashmap!{ "ids".to_string() => vec![ Some("3".to_string()) ] }),
       .. HttpRequest::default() };
     let request2 = HttpRequest {
       path: "/api".to_string(),
-      query: Some(hashmap!{ "ids".to_string() => vec![ "3".to_string(), "1".to_string() ] }),
+      query: Some(hashmap!{ "ids".to_string() => vec![ Some("3".to_string()), Some("1".to_string()) ] }),
       .. HttpRequest::default() };
     let request3 = HttpRequest {
       path: "/api".to_string(),
       query: Some(hashmap!{ "ids".to_string() => vec![
-        "1".to_string(),
-        "2".to_string(),
-        "3".to_string(),
-        "4".to_string()
+        Some("1".to_string()),
+        Some("2".to_string()),
+        Some("3".to_string()),
+        Some("4".to_string())
       ] }),
       .. HttpRequest::default() };
     let request4 = HttpRequest {
       path: "/api".to_string(),
       query: Some(hashmap!{ "ids".to_string() => vec![
-        "id".to_string(),
-        "id".to_string(),
-        "id".to_string(),
-        "id".to_string()
+        Some("id".to_string()),
+        Some("id".to_string()),
+        Some("id".to_string()),
+        Some("id".to_string())
       ] }),
       .. HttpRequest::default() };
     let request5 = HttpRequest {
       path: "/api".to_string(),
       query: Some(hashmap!{ "ids".to_string() => vec![
-        "1".to_string(),
-        "2".to_string(),
-        "3".to_string(),
-        "4".to_string(),
-        "5".to_string()
+        Some("1".to_string()),
+        Some("2".to_string()),
+        Some("3".to_string()),
+        Some("4".to_string()),
+        Some("5".to_string())
       ] }),
       .. HttpRequest::default() };
 
