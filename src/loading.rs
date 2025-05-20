@@ -12,7 +12,7 @@ use futures::StreamExt;
 use maplit::hashmap;
 use pact_models::pact::{load_pact_from_json, read_pact};
 use pact_models::prelude::*;
-use pact_verifier::pact_broker::HALClient;
+use pact_verifier::pact_broker::HALClientBuilder;
 use regex::Regex;
 use serde_json::Value;
 use tracing::{debug, warn};
@@ -145,7 +145,24 @@ pub async fn load_pacts(
           pact_from_url(url, auth, insecure_tls).await.map(|p| (p, s.clone()))
         ],
         PactSource::Broker { url, auth, consumers, providers } => {
-          let client = HALClient::with_url(url, auth.clone());
+          let http_client = if insecure_tls {
+            reqwest::ClientBuilder::new()
+              .user_agent(format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")))
+              .tcp_keepalive(None)
+              .danger_accept_invalid_certs(true)
+              .build()
+              .unwrap()
+          } else {
+            reqwest::ClientBuilder::new()
+              .user_agent(format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")))
+              .tcp_keepalive(None)
+              .build()
+              .unwrap()
+          };
+          let client = HALClientBuilder::builder()
+            .with_url(url, auth.clone())
+            .with_http_client(http_client)
+            .build();
           match client.navigate("pb:latest-pact-versions", &hashmap!{}).await {
             Ok(client) => {
               match client.clone().iter_links("pb:pacts") {
