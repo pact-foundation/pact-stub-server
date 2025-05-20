@@ -75,7 +75,7 @@ pub fn pact_response_to_hyper_response(response: &HttpResponse) -> Result<HyperR
   }
 
   match &response.body {
-    OptionalBody::Present(ref body, content_type, _) => {
+    OptionalBody::Present(body, content_type, _) => {
       let content_type_header = CONTENT_TYPE;
       if !response.has_header(content_type_header.as_str()) {
         let content_type = content_type.clone()
