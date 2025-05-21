@@ -2041,7 +2041,7 @@ dependencies = [
  "itertools 0.10.5",
  "maplit",
  "mimalloc",
- "pact_matching 2.0.0-beta.0",
+ "pact_matching",
  "pact_models",
  "pact_verifier",
  "pretty_assertions",
@@ -2063,51 +2063,9 @@ dependencies = [
 
 [[package]]
 name = "pact_matching"
-version = "2.0.0-beta.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42d3449e46391784513d6016962c8f29827b38d4513e6d709711c1e95089a71f"
-dependencies = [
- "ansi_term",
- "anyhow",
- "base64 0.22.1",
- "bytes",
- "chrono",
- "difference",
- "futures",
- "hex",
- "http 1.3.1",
- "infer",
- "itertools 0.14.0",
- "kiss_xml",
- "lazy_static",
- "lenient_semver",
- "maplit",
- "md5",
- "mime",
- "multer",
- "nom",
- "onig",
- "pact-plugin-driver",
- "pact_models",
- "rand 0.9.1",
- "reqwest",
- "semver",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "snailquote",
- "sxd-document",
- "tokio",
- "tracing",
- "tracing-core",
- "tree_magic_mini",
- "uuid",
-]
-
-[[package]]
-name = "pact_matching"
 version = "2.0.0-beta.1"
-source = "git+https://github.com/pact-foundation/pact-reference#b0d763f07334594c89b933093394f7e1beeb32ef"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9fb7056d9f060df24290009baaaeb77311ff73eea22bd176882b42ca5403ae8a"
 dependencies = [
  "ansi_term",
  "anyhow",
@@ -2189,8 +2147,9 @@ dependencies = [
 
 [[package]]
 name = "pact_verifier"
-version = "1.2.6"
-source = "git+https://github.com/pact-foundation/pact-reference#b0d763f07334594c89b933093394f7e1beeb32ef"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7297846557c882bd339ddf8346907e8dfa43c5faa85a4dcc50dce8d687ea92bd"
 dependencies = [
  "ansi_term",
  "anyhow",
@@ -2206,7 +2165,7 @@ dependencies = [
  "maplit",
  "mime",
  "pact-plugin-driver",
- "pact_matching 2.0.0-beta.1",
+ "pact_matching",
  "pact_models",
  "regex",
  "reqwest",
