@@ -1,5 +1,17 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.6.2 - Correct the insecure_tls flag with a Pact Broker
+
+* 1a51ae7 - chore: Update pact_verifier to 1.3.0 (Ronald Holshausen, Wed May 21 15:12:44 2025 +1000)
+* a0fd845 - fix: Honour the insecure_tls flag when fetching Pacts from a Pact Broker #75 (Ronald Holshausen, Tue May 20 16:28:25 2025 +1000)
+* 1b2580f - chore: Upgrade the Pact crates to latest versions (Ronald Holshausen, Tue May 20 15:40:59 2025 +1000)
+* 85fd8f5 - chore: Upgrade the Pact crates (Ronald Holshausen, Tue May 20 15:32:30 2025 +1000)
+* 95e253f - chore: Update project to Rust 2024 edition (Ronald Holshausen, Tue May 20 10:34:35 2025 +1000)
+* 9665d36 - chore: Update dependencies (Ronald Holshausen, Tue May 20 10:32:49 2025 +1000)
+* 0d39f57 - chore: scheduled Ubuntu 20.04 retirement (Ronald Holshausen, Mon May 12 09:46:13 2025 +1000)
+* f4e42b4 - chore: Correct the author field (Ronald Holshausen, Mon May 12 09:21:57 2025 +1000)
+* 6269fa6 - bump version to 0.6.2 (Ronald Holshausen, Mon May 12 09:20:30 2025 +1000)
+
 # 0.6.1 - Performance Improvements
 
 * 7188299 - perf: Use MiMalloc as global allocator to improve performance (Stefan Ansing, Tue May 6 16:15:21 2025 +0200)
