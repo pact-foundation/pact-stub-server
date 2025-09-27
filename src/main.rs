@@ -107,13 +107,8 @@ mod loading;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-#[tokio::main]
-async fn main() -> Result<(), ExitCode> {
-  let args: Vec<String> = env::args().collect();
-  handle_command_args(args).await
-}
 
-fn print_version() {
+pub fn print_version() {
     println!("pact stub server version  : v{}", env!("CARGO_PKG_VERSION"));
     println!("pact specification version: v{}", PactSpecification::V4.version_str());
 }
@@ -197,10 +192,44 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
   sources
 }
 
-async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
+/// Handles the command line arguments and runs the stub server accordingly.
+///
+/// Used by the binary crate. Parses the provided arguments, sets up logging, loads pact files, and starts the server.
+pub async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
   let app = build_args();
   match app.try_get_matches_from(args) {
-    Ok(ref matches) => {
+    Ok(results) => handle_matches(&results).await,
+
+    Err(ref err) => match err.kind() {
+        ErrorKind::DisplayHelp => {
+            println!("{}", err);
+            Ok(())
+        }
+        ErrorKind::DisplayVersion => {
+            print_version();
+            println!();
+            Ok(())
+        }
+        _ => err.exit(),
+    },
+  }
+}
+
+/// Handles the command line arguments and runs the stub server accordingly.
+///
+/// Used by library consumers. Creates a new Tokio runtime, handle the matches
+/// and starts the server.
+pub fn process_stub_command(args: &ArgMatches) -> Result<(), ExitCode>  {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let res = handle_matches(args).await;
+        match res {
+            Ok(()) => Ok(()),
+            Err(code) => Err(code),
+        }
+    })
+}
+
+async fn handle_matches(matches: &ArgMatches) -> Result<(), ExitCode> {
       let level = matches.get_one::<String>("loglevel").cloned()
         .unwrap_or_else(|| "info".to_string());
       setup_logger(level.as_str());
@@ -246,25 +275,11 @@ async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
           server_handler.start_server(port)
         }).await.unwrap()
       }
-    },
-    Err(ref err) => {
-      match err.kind() {
-        ErrorKind::DisplayHelp => {
-          println!("{}", err);
-          Ok(())
-        },
-        ErrorKind::DisplayVersion => {
-          print_version();
-          println!();
-          Ok(())
-        },
-        _ => err.exit()
-      }
-    }
-  }
 }
 
-fn build_args() -> Command {
+/// Creates a new clap Command instance with the command line arguments for the stub server.
+/// This function defines the command line interface for the stub server, including options for logging, pact file sources, and server configuration.
+pub fn build_args() -> Command {
   command!()
     .about(format!("Pact Stub Server {}", crate_version!()))
     .arg_required_else_help(true)
