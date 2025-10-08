@@ -62,4 +62,4 @@ name = "pact-stub-server"
 path = "src/bin.rs"
 [lib]
 name = "pact_stub_server_cli"
-path = "src/main.rs"
+path = "src/lib.rs"
