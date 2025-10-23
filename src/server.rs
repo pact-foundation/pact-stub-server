@@ -1,7 +1,8 @@
 use std::convert::Infallible;
 use std::pin::Pin;
 use std::process::ExitCode;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
 
 use anyhow::anyhow;
 use futures::executor::block_on;
@@ -44,6 +45,8 @@ pub struct ServerHandler {
 
 pub struct Shared {
   sources: Vec<(V4Pact, PactSource)>,
+  shared_sources: Option<Arc<Mutex<Vec<(V4Pact, PactSource)>>>>,
+  reload_tx: Option<broadcast::Sender<()>>,
   auto_cors: bool,
   cors_referer: bool,
   provider_state: Option<Regex>,
@@ -83,6 +86,31 @@ impl ServerHandler {
     ServerHandler {
       shared: Arc::new(Shared {
         sources,
+        shared_sources: None,
+        reload_tx: None,
+        auto_cors,
+        cors_referer,
+        provider_state,
+        provider_state_header_name,
+        empty_provider_states
+      })
+    }
+  }
+  
+  pub fn new_with_watch(
+    shared_sources: Arc<Mutex<Vec<(V4Pact, PactSource)>>>,
+    reload_tx: broadcast::Sender<()>,
+    auto_cors: bool,
+    cors_referer: bool,
+    provider_state: Option<Regex>,
+    provider_state_header_name: Option<String>,
+    empty_provider_states: bool
+  ) -> ServerHandler {
+    ServerHandler {
+      shared: Arc::new(Shared {
+        sources: vec![], // Empty since we use shared_sources
+        shared_sources: Some(shared_sources),
+        reload_tx: Some(reload_tx),
         auto_cors,
         cors_referer,
         provider_state,
@@ -97,7 +125,17 @@ impl ServerHandler {
     let addr = std::net::SocketAddr::V4(addr);
 
     let handler = self.clone();
-
+    
+    // Start reload listener if in watch mode
+    if let Some(reload_tx) = &handler.shared.reload_tx {
+      let mut reload_rx = reload_tx.subscribe();
+      tokio::spawn(async move {
+        while let Ok(_) = reload_rx.recv().await {
+          info!("Pacts reloaded - server will use updated pacts for new requests");
+        }
+      });
+    }
+    
     block_on(async move {
       let listener = match TcpListener::bind(addr).await {
         Ok(l) => l,
@@ -158,7 +196,14 @@ impl Service<HyperRequest<Incoming>> for ServerHandler {
     let shared = self.shared.as_ref();
     let auto_cors = shared.auto_cors;
     let cors_referer = shared.cors_referer;
-    let sources = shared.sources.clone();
+    
+    // Use shared sources if in watch mode, otherwise use static sources
+    let sources = if let Some(shared_sources) = &shared.shared_sources {
+      shared_sources.lock().unwrap().clone()
+    } else {
+      shared.sources.clone()
+    };
+    
     let provider_state = shared.provider_state.clone();
     let provider_state_header_name = shared.provider_state_header_name.clone();
     let empty_provider_states = shared.empty_provider_states;
