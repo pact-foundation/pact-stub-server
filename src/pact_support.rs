@@ -1,16 +1,21 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 
 use http::{Error, HeaderMap, Uri};
 use http::header::{ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE};
 use http::header::HeaderValue;
 use http::request::Parts;
-use hyper::{Body, Response as HyperResponse};
+use http_body_util::BodyExt;
+use hyper::{Response as HyperResponse};
+use hyper::body::Bytes;
 use pact_models::content_types::TEXT;
 use pact_models::http_parts::HttpPart;
 use pact_models::prelude::*;
 use pact_models::query_strings::parse_query_string;
 use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
 use tracing::{debug, info, warn};
+
+type BoxBody = http_body_util::combinators::BoxBody<Bytes, Infallible>;
 
 fn extract_query_string(uri: &Uri) -> Option<HashMap<String, Vec<Option<String>>>> {
     match uri.query() {
@@ -54,7 +59,7 @@ pub fn hyper_request_to_pact_request(req: Parts, body: OptionalBody) -> HttpRequ
   }
 }
 
-pub fn pact_response_to_hyper_response(response: &HttpResponse) -> Result<HyperResponse<Body>, Error> {
+pub fn pact_response_to_hyper_response(response: &HttpResponse) -> Result<HyperResponse<BoxBody>, Error>{
   info!("<=== Sending {}", response);
   debug!("     body: '{}'", response.body.display_string());
   debug!("     matching_rules: {:?}", response.matching_rules);
@@ -82,9 +87,16 @@ pub fn pact_response_to_hyper_response(response: &HttpResponse) -> Result<HyperR
           .unwrap_or_else(|| response.content_type().unwrap_or_else(|| TEXT.clone()));
         res = res.header(content_type_header, content_type.to_string());
       }
-      res.body(Body::from(body.clone()))
-    },
-    _ => res.body(Body::empty())
+      let body_bytes = Bytes::copy_from_slice(body);
+      let box_body = http_body_util::Full::from(body_bytes).boxed();
+      res.body(box_body)
+          .map_err(|e| Error::from(e))
+      },
+    _ => {
+      let box_body = http_body_util::Full::from(Bytes::new()).boxed();
+      res.body(box_body)
+      .map_err(|e| Error::from(e))
+    }
   }
 }
 
