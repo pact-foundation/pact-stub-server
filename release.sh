@@ -52,6 +52,7 @@ build_linux_aarch64() {
 }
 # Build the x86_64 darwin release
 build_macos_x86_64() {
+    export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-12}
     cargo build --target x86_64-apple-darwin "${cargo_flags[@]}"
 
     if [[ "${cargo_flags[*]}" =~ "--release" ]]; then
@@ -66,6 +67,7 @@ build_macos_x86_64() {
 
 # Build the aarch64 darwin release
 build_macos_aarch64() {
+    export MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET:-12}
     cargo build --target aarch64-apple-darwin "${cargo_flags[@]}"
 
     if [[ "${cargo_flags[*]}" =~ "--release" ]]; then
