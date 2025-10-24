@@ -228,10 +228,10 @@ Docker images are published to multiple registries
 
 | OS      | Architecture | Supported  | Pact Stub Server Version |
 | ------- | ------------ | ---------  | ---------------- |
-| OSX     | x86_64       | ✅         | All              |
+| MacOS   | x86_64       | ✅         | All              |
 | Linux   | x86_64       | ✅         | All              |
 | Windows | x86_64       | ✅         | All              |
-| OSX     | arm64        | ✅         | >=0.5.2          |
+| MacOS   | arm64        | ✅         | >=0.5.2          |
 | Linux   | arm64        | ✅         | >=0.5.2          |
 | Windows | arm64        | ✅         | >=0.6.0          |
 | Alpine  | x86_64       | ✅         | >=0.6.0          |

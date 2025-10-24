@@ -57,9 +57,6 @@ build_macos_x86_64() {
 
     if [[ "${cargo_flags[*]}" =~ "--release" ]]; then
         gzip_and_sum \
-            "$CARGO_TARGET_DIR/x86_64-apple-darwin/release/${APP}" \
-            "$ARTIFACTS_DIR/${APP}-osx-x86_64.gz"
-        gzip_and_sum \
                     "$CARGO_TARGET_DIR/x86_64-apple-darwin/release/${APP}" \
                     "$ARTIFACTS_DIR/${APP}-macos-x86_64.gz"
     fi
@@ -71,9 +68,6 @@ build_macos_aarch64() {
     cargo build --target aarch64-apple-darwin "${cargo_flags[@]}"
 
     if [[ "${cargo_flags[*]}" =~ "--release" ]]; then
-        gzip_and_sum \
-            "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/${APP}" \
-            "$ARTIFACTS_DIR/${APP}-osx-aarch64.gz"
         gzip_and_sum \
                     "$CARGO_TARGET_DIR/aarch64-apple-darwin/release/${APP}" \
                     "$ARTIFACTS_DIR/${APP}-macos-aarch64.gz"

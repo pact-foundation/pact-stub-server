@@ -9,11 +9,11 @@ mkdir -p ~/.pact/bin
 case "$(uname -s)" in
 
    Darwin)
-     echo '== Installing stub server CLI for Mac OSX =='
+     echo '== Installing stub server CLI for Mac OS =='
      if [ "$(uname -m)" = "arm64" ]; then
-        curl -L -o ~/.pact/bin/pact-stub-server.gz https://github.com/pact-foundation/pact-stub-server/releases/download/v${VERSION}/pact-stub-server-osx-aarch64.gz
+        curl -L -o ~/.pact/bin/pact-stub-server.gz https://github.com/pact-foundation/pact-stub-server/releases/download/v${VERSION}/pact-stub-server-macos-aarch64.gz
      else
-        curl -L -o ~/.pact/bin/pact-stub-server.gz https://github.com/pact-foundation/pact-stub-server/releases/download/v${VERSION}/pact-stub-server-osx-x86_64.gz
+        curl -L -o ~/.pact/bin/pact-stub-server.gz https://github.com/pact-foundation/pact-stub-server/releases/download/v${VERSION}/pact-stub-server-macos-x86_64.gz
      fi
      gunzip -N -f ~/.pact/bin/pact-stub-server.gz
      chmod +x ~/.pact/bin/pact-stub-server
