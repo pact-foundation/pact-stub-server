@@ -56,10 +56,3 @@ lto = true
 # https://doc.rust-lang.org/stable/rustc/codegen-options/
 # https://doc.rust-lang.org/rustc/profile-guided-optimization.html
 # https://github.com/johnthagen/min-sized-rust
-
-[[bin]]
-name = "pact-stub-server"
-path = "src/bin.rs"
-[lib]
-name = "pact_stub_server_cli"
-path = "src/lib.rs"
