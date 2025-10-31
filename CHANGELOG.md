@@ -1,5 +1,19 @@
 To generate the log, run `git log --pretty='* %h - %s (%an, %ad)' TAGNAME..HEAD .` replacing TAGNAME and HEAD as appropriate.
 
+# 0.7.0 - [Feature Release]
+
+* 1c42707 - chore: rename bin.rs to bin/pact-stub-server (Yousaf Nabi, Fri Oct 31 16:01:18 2025 +0000)
+* ac5344e - fix: remove pathname from release artifact shasum (Yousaf Nabi, Fri Oct 24 13:56:27 2025 +0100)
+* 1ddbc54 - chore(ci): fix release workflow (macos) (Yousaf Nabi, Fri Oct 24 13:53:26 2025 +0100)
+* 793fa3b - chore(ci): fix release workflow (macos) (Yousaf Nabi, Fri Oct 24 13:52:17 2025 +0100)
+* 45e0056 - feat: add file watch mode for hot reloading pact files/dirs (Yousaf Nabi, Thu Oct 23 23:43:13 2025 +0100)
+* eebe3fe - feat: update to hyper 1.x / latest tower (Yousaf Nabi, Thu Oct 23 23:35:30 2025 +0100)
+* a4f02ae - chore: rename main.rs to lib.rs to align with rust conventions (Yousaf Nabi, Wed Oct 8 22:19:35 2025 +0100)
+* a36631c - ci: switch windows-2019 to windows-latest (Yousaf Nabi, Sat Sep 27 11:50:22 2025 +0100)
+* 56ccc6a - feat: cli as lib (Yousaf Nabi, Sat Sep 27 11:47:46 2025 +0100)
+* 7548780 - chore: Correct the release script (Ronald Holshausen, Wed May 21 16:07:31 2025 +1000)
+* 92ce531 - bump version to 0.6.3 (Ronald Holshausen, Wed May 21 15:27:53 2025 +1000)
+
 # 0.6.2 - Correct the insecure_tls flag with a Pact Broker
 
 * 1a51ae7 - chore: Update pact_verifier to 1.3.0 (Ronald Holshausen, Wed May 21 15:12:44 2025 +1000)

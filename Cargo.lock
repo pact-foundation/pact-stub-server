@@ -2055,7 +2055,7 @@ dependencies = [
 
 [[package]]
 name = "pact-stub-server"
-version = "0.6.3"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "base64",

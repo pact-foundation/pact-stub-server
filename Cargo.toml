@@ -1,6 +1,6 @@
 [package]
 name = "pact-stub-server"
-version = "0.6.3"
+version = "0.7.0"
 edition = "2024"
 authors = ["Ronald Holshausen <ronald.holshausen@gmail.com>"]
 description = "Standalone pact stub server"
