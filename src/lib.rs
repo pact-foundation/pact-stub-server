@@ -87,18 +87,120 @@
 use std::env;
 use std::process::ExitCode;
 use std::str::FromStr;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use std::sync::mpsc::channel;
 
 use clap::{Command, Arg, ArgMatches, ArgAction, command, crate_version};
 use clap::error::ErrorKind;
 use mimalloc::MiMalloc;
 use pact_models::prelude::*;
+use pact_models::prelude::v4::*;
 use regex::Regex;
 use tracing::{debug, error, info, warn};
 use tracing_core::LevelFilter;
 use tracing_subscriber::FmtSubscriber;
+use tokio::sync::broadcast;
+use notify::RecursiveMode;
+use notify_debouncer_mini::{DebouncedEventKind, new_debouncer};
 use crate::loading::load_pacts;
 
 use crate::server::ServerHandler;
+
+/// Setup file watcher for watch mode
+fn setup_file_watcher(
+  sources: Vec<PactSource>,
+  matches: &ArgMatches,
+  shared_pacts: Arc<Mutex<Vec<(V4Pact, PactSource)>>>,
+  reload_tx: broadcast::Sender<()>
+) {
+  let watch_paths = get_watch_paths(&sources);
+  if watch_paths.is_empty() {
+    warn!("No file or directory sources found for watching");
+    return;
+  }
+
+  let insecure_tls = matches.get_flag("insecure-tls");
+  let ext = matches.get_one::<String>("ext").cloned();
+  
+  std::thread::spawn(move || {
+    let (debounce_tx, debounce_rx) = channel();
+    let mut debouncer = match new_debouncer(Duration::from_secs(1), debounce_tx) {
+      Ok(debouncer) => debouncer,
+      Err(e) => {
+        error!("Failed to create file debouncer: {}", e);
+        return;
+      }
+    };
+
+    // Watch all file and directory sources
+    for path in &watch_paths {
+      if let Err(e) = debouncer.watcher().watch(path, RecursiveMode::Recursive) {
+        error!("Failed to watch path {:?}: {}", path, e);
+      } else {
+        info!("Watching for changes in: {:?}", path);
+      }
+    }
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    
+    loop {
+      match debounce_rx.recv() {
+        Ok(Ok(events)) => {
+          for event in events.iter() {
+            match &event.kind {
+              DebouncedEventKind::Any => {
+                info!("File change detected in watched directory");
+                
+                // Reload pacts
+                let pacts_result = runtime.block_on(load_pacts(sources.clone(), insecure_tls, ext.as_ref()));
+                if pacts_result.iter().any(|p| p.is_err()) {
+                  error!("Error reloading pacts:");
+                  for error in pacts_result.iter().filter_map(|p| p.as_ref().err()) {
+                    error!("  - {}", error);
+                  }
+                } else {
+                  let new_pacts = pacts_result.iter()
+                    .filter_map(|result| result.as_ref().ok())
+                    .map(|(p, s)| (p.as_v4_pact().unwrap(), s.clone()))
+                    .collect::<Vec<_>>();
+                  
+                  let interactions: usize = new_pacts.iter().map(|(p, _)| p.interactions.len()).sum();
+                  info!("Reloaded {} pacts ({} total interactions)", new_pacts.len(), interactions);
+                  
+                  *shared_pacts.lock().unwrap() = new_pacts;
+                  let _ = reload_tx.send(());
+                }
+                break;
+              }
+              _ => {}
+            }
+          }
+        }
+        Ok(Err(e)) => {
+          error!("Watch error: {:?}", e);
+          break;
+        }
+        Err(e) => {
+          error!("Debouncer channel error: {:?}", e);
+          break;
+        }
+      }
+    }
+  });
+}
+
+/// Extract file and directory paths from pact sources for watching
+fn get_watch_paths(sources: &[PactSource]) -> Vec<PathBuf> {
+  sources.iter()
+    .filter_map(|source| match source {
+      PactSource::File(path) => Some(PathBuf::from(path)),
+      PactSource::Dir(path) => Some(PathBuf::from(path)),
+      _ => None, // URLs and Broker sources are not watchable
+    })
+    .collect()
+}
 
 mod pact_support;
 mod server;
@@ -107,13 +209,8 @@ mod loading;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-#[tokio::main]
-async fn main() -> Result<(), ExitCode> {
-  let args: Vec<String> = env::args().collect();
-  handle_command_args(args).await
-}
 
-fn print_version() {
+pub fn print_version() {
     println!("pact stub server version  : v{}", env!("CARGO_PKG_VERSION"));
     println!("pact specification version: v{}", PactSpecification::V4.version_str());
 }
@@ -197,16 +294,51 @@ fn pact_source(matches: &ArgMatches) -> Vec<PactSource> {
   sources
 }
 
-async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
+/// Handles the command line arguments and runs the stub server accordingly.
+///
+/// Used by the binary crate. Parses the provided arguments, sets up logging, loads pact files, and starts the server.
+pub async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
   let app = build_args();
   match app.try_get_matches_from(args) {
-    Ok(ref matches) => {
+    Ok(results) => handle_matches(&results).await,
+
+    Err(ref err) => match err.kind() {
+        ErrorKind::DisplayHelp => {
+            println!("{}", err);
+            Ok(())
+        }
+        ErrorKind::DisplayVersion => {
+            print_version();
+            println!();
+            Ok(())
+        }
+        _ => err.exit(),
+    },
+  }
+}
+
+/// Handles the command line arguments and runs the stub server accordingly.
+///
+/// Used by library consumers. Creates a new Tokio runtime, handle the matches
+/// and starts the server.
+pub fn process_stub_command(args: &ArgMatches) -> Result<(), ExitCode>  {
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let res = handle_matches(args).await;
+        match res {
+            Ok(()) => Ok(()),
+            Err(code) => Err(code),
+        }
+    })
+}
+
+async fn handle_matches(matches: &ArgMatches) -> Result<(), ExitCode> {
       let level = matches.get_one::<String>("loglevel").cloned()
         .unwrap_or_else(|| "info".to_string());
       setup_logger(level.as_str());
       let sources = pact_source(matches);
+      let watch_mode = matches.get_flag("watch");
 
-      let pacts = load_pacts(sources, matches.get_flag("insecure-tls"),
+      let pacts = load_pacts(sources.clone(), matches.get_flag("insecure-tls"),
         matches.get_one("ext")).await;
       if pacts.iter().any(|p| p.is_err()) {
         error!("There were errors loading the pact files.");
@@ -235,36 +367,44 @@ async fn handle_command_args(args: Vec<String>) -> Result<(), ExitCode> {
         info!("Loaded {} pacts ({} total interactions)", pacts.len(), interactions);
         let auto_cors = matches.get_flag("cors");
         let referer = matches.get_flag("cors-referer");
-        let server_handler = ServerHandler::new(
-          pacts,
-          auto_cors,
-          referer,
-          provider_state,
-          provider_state_header_name,
-          empty_provider_states);
-        tokio::task::spawn_blocking(move || {
-          server_handler.start_server(port)
-        }).await.unwrap()
+        
+        if watch_mode {
+          // Setup shared state for pacts when in watch mode
+          let shared_pacts = Arc::new(Mutex::new(pacts.clone()));
+          let (reload_tx, reload_rx) = broadcast::channel::<()>(1);
+          
+          // Setup file watching if in watch mode
+          setup_file_watcher(sources, matches, shared_pacts.clone(), reload_tx.clone());
+          
+          let server_handler = ServerHandler::new_with_watch(
+            shared_pacts,
+            reload_tx,
+            auto_cors,
+            referer,
+            provider_state,
+            provider_state_header_name,
+            empty_provider_states);
+          tokio::task::spawn_blocking(move || {
+            server_handler.start_server(port)
+          }).await.unwrap()
+        } else {
+          let server_handler = ServerHandler::new(
+            pacts,
+            auto_cors,
+            referer,
+            provider_state,
+            provider_state_header_name,
+            empty_provider_states);
+          tokio::task::spawn_blocking(move || {
+            server_handler.start_server(port)
+          }).await.unwrap()
+        }
       }
-    },
-    Err(ref err) => {
-      match err.kind() {
-        ErrorKind::DisplayHelp => {
-          println!("{}", err);
-          Ok(())
-        },
-        ErrorKind::DisplayVersion => {
-          print_version();
-          println!();
-          Ok(())
-        },
-        _ => err.exit()
-      }
-    }
-  }
 }
 
-fn build_args() -> Command {
+/// Creates a new clap Command instance with the command line arguments for the stub server.
+/// This function defines the command line interface for the stub server, including options for logging, pact file sources, and server configuration.
+pub fn build_args() -> Command {
   command!()
     .about(format!("Pact Stub Server {}", crate_version!()))
     .arg_required_else_help(true)
@@ -369,6 +509,11 @@ fn build_args() -> Command {
       .action(ArgAction::Append)
       .value_parser(regex_value)
       .help("Provider name or regex to use to filter the Pacts fetched from the Pact broker (can be repeated)"))
+    .arg(Arg::new("watch")
+      .short('w')
+      .long("watch")
+      .action(ArgAction::SetTrue)
+      .help("Watch for changes in pact files and reload automatically"))
     .arg(Arg::new("version")
       .short('v')
       .long("version")

@@ -37,6 +37,8 @@ Options:
           Consumer name or regex to use to filter the Pacts fetched from the Pact broker (can be repeated)
       --provider-name <provider-name>
           Provider name or regex to use to filter the Pacts fetched from the Pact broker (can be repeated)
+  -w, --watch
+          Watch for changes in pact files and reload automatically
   -v, --version
           Print version information
   -h, --help

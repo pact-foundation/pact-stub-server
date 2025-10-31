@@ -1,16 +1,18 @@
-use std::future::{Ready, ready};
+use std::convert::Infallible;
 use std::pin::Pin;
 use std::process::ExitCode;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use tokio::sync::broadcast;
 
 use anyhow::anyhow;
 use futures::executor::block_on;
 use futures::future::Future;
 use futures::stream::StreamExt;
 use futures::task::{Context, Poll};
-use http::{Error, StatusCode};
-use hyper::{Body, Request as HyperRequest, Response as HyperResponse, Server};
-use hyper::server::conn::AddrStream;
+use http::{StatusCode};
+use http_body_util::BodyExt;
+use hyper::{Request as HyperRequest};
+use hyper::body::{Bytes, Incoming};
 use itertools::Itertools;
 use maplit::hashmap;
 use pact_matching::{CoreMatchingContext, DiffConfig, Mismatch};
@@ -20,11 +22,19 @@ use pact_models::prelude::v4::*;
 use pact_models::v4::http_parts::{HttpRequest, HttpResponse};
 use pact_models::v4::V4InteractionType;
 use regex::Regex;
-use tower::ServiceBuilder;
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::{DefaultMakeSpan, Trace, TraceLayer};
 use tower_service::Service;
 use tracing::{debug, error, info, warn};
+use hyper::Response;
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    server::conn::auto::Builder,
+};
+use tokio::net::TcpListener;
+use tower::Layer;
+
+type BoxBody = http_body_util::combinators::BoxBody<Bytes, Infallible>;
 
 use crate::{pact_support, PactSource};
 
@@ -35,6 +45,8 @@ pub struct ServerHandler {
 
 pub struct Shared {
   sources: Vec<(V4Pact, PactSource)>,
+  shared_sources: Option<Arc<Mutex<Vec<(V4Pact, PactSource)>>>>,
+  reload_tx: Option<broadcast::Sender<()>>,
   auto_cors: bool,
   cors_referer: bool,
   provider_state: Option<Regex>,
@@ -42,35 +54,23 @@ pub struct Shared {
   empty_provider_states: bool
 }
 
+pub trait TraceLayerProvider {
+  fn create_trace_layer() -> TraceLayer<SharedClassifier<ServerErrorsAsFailures>> {
+    TraceLayer::new_for_http()
+      .make_span_with(DefaultMakeSpan::new().include_headers(true))
+  }
+}
+
 #[derive(Clone)]
-struct ServerHandlerFactory {
-  inner: ServerHandler
-}
+pub struct ServerHandlerLayer;
 
-impl ServerHandlerFactory {
-  pub fn new(handler: ServerHandler) -> Self {
-    ServerHandlerFactory {
-      inner: handler,
-    }
-  }
-}
+impl TraceLayerProvider for ServerHandlerLayer {}
 
-impl Service<&AddrStream> for ServerHandlerFactory {
-  type Response = Trace<ServerHandler, SharedClassifier<ServerErrorsAsFailures>>;
-  type Error = anyhow::Error;
-  type Future = Ready<Result<Self::Response, Self::Error>>;
+impl<S> Layer<S> for ServerHandlerLayer {
+  type Service = Trace<S, SharedClassifier<ServerErrorsAsFailures>>;
 
-  fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-    Poll::Ready(Ok(()))
-  }
-
-  fn call(&mut self, req: &AddrStream) -> Self::Future {
-    debug!("Accepting a new connection from {}", req.remote_addr());
-    let service = ServiceBuilder::new()
-      .layer(TraceLayer::new_for_http()
-        .make_span_with(DefaultMakeSpan::new().include_headers(true)))
-      .service(self.inner.clone());
-    ready(Ok(service))
+  fn layer(&self, inner: S) -> Self::Service {
+    Self::create_trace_layer().layer(inner)
   }
 }
 
@@ -82,10 +82,35 @@ impl ServerHandler {
     provider_state: Option<Regex>,
     provider_state_header_name: Option<String>,
     empty_provider_states: bool
-  ) ->  ServerHandler {
+  ) -> ServerHandler {
     ServerHandler {
       shared: Arc::new(Shared {
         sources,
+        shared_sources: None,
+        reload_tx: None,
+        auto_cors,
+        cors_referer,
+        provider_state,
+        provider_state_header_name,
+        empty_provider_states
+      })
+    }
+  }
+  
+  pub fn new_with_watch(
+    shared_sources: Arc<Mutex<Vec<(V4Pact, PactSource)>>>,
+    reload_tx: broadcast::Sender<()>,
+    auto_cors: bool,
+    cors_referer: bool,
+    provider_state: Option<Regex>,
+    provider_state_header_name: Option<String>,
+    empty_provider_states: bool
+  ) -> ServerHandler {
+    ServerHandler {
+      shared: Arc::new(Shared {
+        sources: vec![], // Empty since we use shared_sources
+        shared_sources: Some(shared_sources),
+        reload_tx: Some(reload_tx),
         auto_cors,
         cors_referer,
         provider_state,
@@ -96,39 +121,89 @@ impl ServerHandler {
   }
 
   pub fn start_server(self, port: u16) -> Result<(), ExitCode> {
-    let addr = ([0, 0, 0, 0], port).into();
-    match Server::try_bind(&addr) {
-      Ok(builder) => {
-        let server = builder.serve(ServerHandlerFactory::new(self));
-        info!("Server started on port {}", server.local_addr().port());
-        block_on(server).map_err(|err| {
-          error!("error occurred scheduling server future on Tokio runtime: {}", err);
-          ExitCode::from(2)
-        })?;
-        Ok(())
-      },
-      Err(err) => {
-        error!("could not start server: {}", err);
-        Err(ExitCode::FAILURE)
-      }
+    let addr = std::net::SocketAddrV4::new(std::net::Ipv4Addr::new(0, 0, 0, 0), port);
+    let addr = std::net::SocketAddr::V4(addr);
+
+    let handler = self.clone();
+    
+    // Start reload listener if in watch mode
+    if let Some(reload_tx) = &handler.shared.reload_tx {
+      let mut reload_rx = reload_tx.subscribe();
+      tokio::spawn(async move {
+        while let Ok(_) = reload_rx.recv().await {
+          info!("Pacts reloaded - server will use updated pacts for new requests");
+        }
+      });
     }
+    
+    block_on(async move {
+      let listener = match TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(err) => {
+          error!("tcp listener failed to bind address: {}", err);
+          return Err(ExitCode::FAILURE);
+        }
+      };
+
+      let local_addr = match listener.local_addr() {
+        Ok(a) => a,
+        Err(err) => {
+          error!("failed to get local address: {}", err);
+          return Err(ExitCode::FAILURE);
+        }
+      };
+      info!("Server started on port {}", local_addr.port());
+
+      loop {
+        match listener.accept().await {
+          Ok((stream, _)) => {
+            let handler = handler.clone();
+            tokio::spawn(async move {
+              let io = TokioIo::new(stream);
+              let handler = handler.clone();
+              let tower_service = tower::ServiceBuilder::new()
+                .layer(ServerHandlerLayer)
+                .service(handler);
+              let hyper_service = hyper_util::service::TowerToHyperService::new(tower_service);
+              if let Err(err) = Builder::new(TokioExecutor::new())
+                .serve_connection(io, hyper_service)
+                .await
+              {
+                error!("error serving connection: {:?}", err);
+              }
+            });
+          }
+          Err(err) => {
+            error!("tcp listener failed to accept: {}", err);
+            return Err(ExitCode::FAILURE);
+          }
+        }
+      }
+    })
   }
 }
 
-impl Service<HyperRequest<Body>> for ServerHandler {
-  type Response = HyperResponse<Body>;
-  type Error = Error;
+impl Service<HyperRequest<Incoming>> for ServerHandler {
+  type Response = Response<BoxBody>;
+  type Error = hyper::http::Error;
   type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
   fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
     Poll::Ready(Ok(()))
   }
 
-  fn call(&mut self, req: HyperRequest<Body>) -> Self::Future {
+  fn call(&mut self, req: HyperRequest<Incoming>) -> Self::Future {
     let shared = self.shared.as_ref();
     let auto_cors = shared.auto_cors;
     let cors_referer = shared.cors_referer;
-    let sources = shared.sources.clone();
+    
+    // Use shared sources if in watch mode, otherwise use static sources
+    let sources = if let Some(shared_sources) = &shared.shared_sources {
+      shared_sources.lock().unwrap().clone()
+    } else {
+      shared.sources.clone()
+    };
+    
     let provider_state = shared.provider_state.clone();
     let provider_state_header_name = shared.provider_state_header_name.clone();
     let empty_provider_states = shared.empty_provider_states;
@@ -147,12 +222,18 @@ impl Service<HyperRequest<Body>> for ServerHandler {
         None => provider_state
       };
 
-      let bytes = hyper::body::to_bytes(body).await;
+      let bytes = body
+        .boxed()
+        .collect()
+        .await;
       let body = match bytes {
-        Ok(contents) => if contents.is_empty() {
-          OptionalBody::Empty
-        } else {
-          OptionalBody::Present(contents, None, None)
+        Ok(contents) => {
+          let bytes = contents.to_bytes();
+          if bytes.is_empty() {
+            OptionalBody::Empty
+          } else {
+            OptionalBody::Present(bytes, None, None)
+          }
         },
         Err(err) => {
           warn!("Failed to read request body: {}", err);

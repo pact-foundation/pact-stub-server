@@ -20,9 +20,9 @@ jobs:
         include:
           - operating-system: ubuntu-22.04
             targets: x86_64-unknown-linux-gnu,x86_64-unknown-linux-musl,aarch64-unknown-linux-gnu,aarch64-unknown-linux-musl
-          - operating-system: windows-2019
+          - operating-system: windows-latest
             targets: aarch64-pc-windows-msvc,x86_64-pc-windows-msvc
-          - operating-system: macos-13
+          - operating-system: macos-latest
             targets: aarch64-apple-darwin,x86_64-apple-darwin
       fail-fast: false
     steps:

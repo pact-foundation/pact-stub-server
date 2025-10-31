@@ -15,4 +15,11 @@ gzip_and_sum() {
 
     gzip --stdout --best "$orig_file" > "$target_file"
     openssl dgst -sha256 -r "$target_file" > "$digest_file"
+    basenamedir=$(basename $target_file)
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # OSX requires an empty arg passed to -i, but this doesn't work on Lin/Win
+        sed -Ei '' "s|\*(.*)$|\*$basenamedir|" "$digest_file"
+    else
+        sed -Ei "s|\*(.*)$|\*$basenamedir|" "$digest_file"
+    fi
 }

@@ -130,6 +130,50 @@ The running server can be controlled with the following options:
 |--------|-------------|
 | `-p, --port <port>` | The port to bind to. If not specified, a random port will be allocated by the operating system. |
 
+### Watch mode
+
+The Pact Stub Server now supports a watch mode that automatically monitors pact files and directories for changes and reloads them without restarting the server. This feature is particularly useful during development when pact files are frequently updated.
+
+#### Usage
+
+To enable watch mode, use the `--watch` or `-w` flag:
+
+```bash
+# Watch a single pact file
+pact-stub-server --file path/to/pact.json --watch --port 8080
+
+# Watch a directory of pact files
+pact-stub-server --dir path/to/pacts --watch --port 8080
+
+# Watch multiple files and directories
+pact-stub-server --file pact1.json --file pact2.json --dir pacts_dir --watch --port 8080
+```
+
+#### Supported Source Types
+
+Watch mode supports the following pact source types:
+
+- **File sources** (`--file`): Individual pact files are monitored for changes
+- **Directory sources** (`--dir`): Entire directories are monitored recursively for changes to pact files
+
+**Note**: URL sources (`--url`) and Pact Broker sources (`--broker-url`) are not supported for watching as they are remote resources.
+
+#### File System Events
+
+The watcher responds to the following types of file system events:
+
+- File modifications (content changes)
+- File creation (new pact files added)
+- File deletion (pact files removed)
+- Directory changes (new files added to watched directories)
+
+#### Limitations
+
+- Only works with local file and directory sources
+- URL and Pact Broker sources cannot be watched
+- Requires file system notifications to be available on the host system
+- Memory usage may be slightly higher due to shared state management
+
 ## Docker
 
 ### Usage 
@@ -184,10 +228,10 @@ Docker images are published to multiple registries
 
 | OS      | Architecture | Supported  | Pact Stub Server Version |
 | ------- | ------------ | ---------  | ---------------- |
-| OSX     | x86_64       | ✅         | All              |
+| MacOS   | x86_64       | ✅         | All              |
 | Linux   | x86_64       | ✅         | All              |
 | Windows | x86_64       | ✅         | All              |
-| OSX     | arm64        | ✅         | >=0.5.2          |
+| MacOS   | arm64        | ✅         | >=0.5.2          |
 | Linux   | arm64        | ✅         | >=0.5.2          |
 | Windows | arm64        | ✅         | >=0.6.0          |
 | Alpine  | x86_64       | ✅         | >=0.6.0          |
