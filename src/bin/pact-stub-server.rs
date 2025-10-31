@@ -1,6 +1,6 @@
 use std::env;
 use std::process::ExitCode;
-use pact_stub_server_cli::handle_command_args;
+use pact_stub_server::handle_command_args;
 
 #[tokio::main]
 async fn main() -> Result<(), ExitCode> {
