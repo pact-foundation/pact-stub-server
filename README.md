@@ -224,7 +224,9 @@ Docker images are published to multiple registries
 
 ## Compatibility
 
-<details><summary>Supported Platforms</summary>
+<details>
+
+<summary>Supported Platforms</summary>
 
 | OS      | Architecture | Supported  | Pact Stub Server Version |
 | ------- | ------------ | ---------  | ---------------- |
