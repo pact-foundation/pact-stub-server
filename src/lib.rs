@@ -123,7 +123,8 @@ fn setup_file_watcher(
 
   let insecure_tls = matches.get_flag("insecure-tls");
   let ext = matches.get_one::<String>("ext").cloned();
-  
+  let retries = *matches.get_one::<u8>("retries").unwrap_or(&8);
+
   std::thread::spawn(move || {
     let (debounce_tx, debounce_rx) = channel();
     let mut debouncer = match new_debouncer(Duration::from_secs(1), debounce_tx) {
@@ -154,7 +155,7 @@ fn setup_file_watcher(
                 info!("File change detected in watched directory");
                 
                 // Reload pacts
-                let pacts_result = runtime.block_on(load_pacts(sources.clone(), insecure_tls, ext.as_ref()));
+                let pacts_result = runtime.block_on(load_pacts(sources.clone(), insecure_tls, ext.as_ref(), retries));
                 if pacts_result.iter().any(|p| p.is_err()) {
                   error!("Error reloading pacts:");
                   for error in pacts_result.iter().filter_map(|p| p.as_ref().err()) {
@@ -338,8 +339,9 @@ async fn handle_matches(matches: &ArgMatches) -> Result<(), ExitCode> {
       let sources = pact_source(matches);
       let watch_mode = matches.get_flag("watch");
 
+      let retries = *matches.get_one::<u8>("retries").unwrap_or(&8);
       let pacts = load_pacts(sources.clone(), matches.get_flag("insecure-tls"),
-        matches.get_one("ext")).await;
+        matches.get_one("ext"), retries).await;
       if pacts.iter().any(|p| p.is_err()) {
         error!("There were errors loading the pact files.");
         for error in pacts.iter()
@@ -509,6 +511,14 @@ pub fn build_args() -> Command {
       .action(ArgAction::Append)
       .value_parser(regex_value)
       .help("Provider name or regex to use to filter the Pacts fetched from the Pact broker (can be repeated)"))
+    .arg(Arg::new("retries")
+      .long("retries")
+      .num_args(1)
+      .default_value("8")
+      .value_parser(clap::value_parser!(u8))
+      .help("The number of times to retry failed HTTP requests (retries on 5xx, 408, and 429). Delays use exponential back-off starting at 500 ms and doubling each attempt.")
+      .value_name("PACT_BROKER_HTTP_RETRIES")
+      .env("PACT_BROKER_HTTP_RETRIES"))
     .arg(Arg::new("watch")
       .short('w')
       .long("watch")
