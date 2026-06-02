@@ -94,7 +94,6 @@ use std::sync::mpsc::channel;
 
 use clap::{Command, Arg, ArgMatches, ArgAction, command, crate_version};
 use clap::error::ErrorKind;
-use mimalloc::MiMalloc;
 use pact_models::prelude::*;
 use pact_models::prelude::v4::*;
 use regex::Regex;
@@ -206,9 +205,6 @@ fn get_watch_paths(sources: &[PactSource]) -> Vec<PathBuf> {
 mod pact_support;
 mod server;
 mod loading;
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
 
 
 pub fn print_version() {
